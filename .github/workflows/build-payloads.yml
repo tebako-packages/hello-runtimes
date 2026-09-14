@@ -228,11 +228,27 @@ jobs:
           printf '%s\n' "$TEBAKO_SIGNING_KEY" > "$TEBAKO_HOME/keys/ci-signing.key"
           chmod 600 "$TEBAKO_HOME/keys/ci-signing.key"
           for app in hello-ruby hello-python hello-java; do
-            # shellcheck disable=SC2046  # --payload-args MUST word-split into the per-triplet --payload pairs
-            "$TEBAKO_CLI" publish --sign="$SIGNING_KEYID" --name "$app" \
-              --release "tfs:github:tebako-packages/hello-runtimes:${{ github.ref_name }}" \
-              $(ruby tools/pins.rb --payload-args "$app") \
-              --registry-out "$PWD/tpkg-registry.yaml"
+            # The clean-cache verify installs from the JUST-uploaded
+            # release; GitHub's asset listing lags the upload by a beat
+            # (proven live: ruby green, python's listing raced 7s later).
+            # Retry bounded ONLY on that signature — any other failure is
+            # terminal on first sight.
+            attempt=1
+            while :; do
+              log="$(mktemp)"
+              # shellcheck disable=SC2046  # --payload-args MUST word-split into the per-triplet --payload pairs
+              if "$TEBAKO_CLI" publish --sign="$SIGNING_KEYID" --name "$app" \
+                  --release "tfs:github:tebako-packages/hello-runtimes:${{ github.ref_name }}" \
+                  $(ruby tools/pins.rb --payload-args "$app") \
+                  --registry-out "$PWD/tpkg-registry.yaml" 2>&1 | tee "$log"; then
+                break
+              elif grep -q "carries no asset named" "$log" && [ "$attempt" -lt 4 ]; then
+                echo "::warning::publish verify raced the release asset index (attempt $attempt) — retrying in 20s"
+                sleep 20; attempt=$((attempt + 1))
+              else
+                echo "::error::publish failed for $app"; exit 1
+              fi
+            done
           done
 
       - name: Registry PR (main is protected)
