@@ -83,9 +83,12 @@ when "--runtimes"
   spec = RECIPE.fetch("apps").fetch(ARGV[1])
   spec.fetch("runtimes").each { |rt| puts "#{rt.fetch("version")} #{rt.fetch("tebako")} #{rt.fetch("release")}" }
 when "--payload-args"
-  legs.map do |l|
-    "--payload #{l["app"]}=#{RECIPE.fetch("version")}=out/#{l["triplet"]}/#{l["app"]}-#{RECIPE.fetch("version")}-#{l["host_id"]}.tfs"
+  # tebako publish's grammar is --payload <triplet>=<path> (identity rides
+  # --name + the manifest); one pair per leg of the named app.
+  app = ARGV[1] or abort "usage: ruby tools/pins.rb --payload-args APP"
+  legs.select { |l| l["app"] == app }.map do |l|
+    "--payload #{l["triplet"]}=out/#{l["triplet"]}/#{app}-#{RECIPE.fetch("version")}-#{l["host_id"]}.tfs"
   end.each { |a| puts a }
 else
-  abort "usage: ruby tools/pins.rb [--matrix | --env APP TRIPLET | --runtimes APP | --payload-args]"
+  abort "usage: ruby tools/pins.rb [--matrix | --env APP TRIPLET | --runtimes APP | --payload-args APP]"
 end

@@ -169,6 +169,22 @@ jobs:
           pattern: payload-*
           path: out/
 
+      - name: Restore the out/<triplet>/ layout
+        # Each payload-<app>-<triplet> artifact carries its leg's
+        # dist/<triplet>/ contents nested one level deep; merge them back
+        # to out/<triplet>/ (same-triplet dirs across apps never collide —
+        # the filenames carry the app).
+        run: |
+          set -euo pipefail
+          for d in out/payload-*/; do
+            for t in "$d"*/; do
+              triplet="$(basename "$t")"
+              mkdir -p "out/$triplet"
+              mv "$t"* "out/$triplet/"
+            done
+            rm -rf "$d"
+          done
+
       - name: Stage the publish-verify mirror (each engine's first line)
         run: |
           set -euo pipefail
@@ -195,17 +211,18 @@ jobs:
         run: |
           set -euo pipefail
           TEBAKO_CLI="$PWD/.tools/tebako"
-          SIGN_ARGS=()
           : "${TEBAKO_SIGNING_KEY:?publish: recipe declares signing but TEBAKO_SIGNING_KEY is empty — a signing feedstock never publishes unsigned}"
-          mkdir -p "$HOME/.tebako/keys"
-          printf '%s\n' "$TEBAKO_SIGNING_KEY" > "$HOME/.tebako/keys/ci-signing.key"
-          chmod 600 "$HOME/.tebako/keys/ci-signing.key"
-          SIGN_ARGS=(--sign="$SIGNING_KEYID")
+          # tebako-cli resolves secret keys by keyid from
+          # $TEBAKO_HOME/keys/*.key — stage the CI subkey there.
+          TEBAKO_HOME="${TEBAKO_HOME:-$HOME/.tebako}"
+          mkdir -p "$TEBAKO_HOME/keys"
+          printf '%s\n' "$TEBAKO_SIGNING_KEY" > "$TEBAKO_HOME/keys/ci-signing.key"
+          chmod 600 "$TEBAKO_HOME/keys/ci-signing.key"
           for app in hello-ruby hello-python hello-java; do
-            # shellcheck disable=SC2046  # word-split IS the point: --payload triples
-            "$TEBAKO_CLI" publish "${SIGN_ARGS[@]}" --name "$app" \
+            # shellcheck disable=SC2046  # --payload-args MUST word-split into the per-triplet --payload pairs
+            "$TEBAKO_CLI" publish --sign="$SIGNING_KEYID" --name "$app" \
               --release "tfs:github:tebako-packages/hello-runtimes:${{ github.ref_name }}" \
-              $(ruby tools/pins.rb --payload-args | grep "^--payload $app=") \
+              $(ruby tools/pins.rb --payload-args "$app") \
               --registry-out "$PWD/tpkg-registry.yaml"
           done
 
