@@ -56,7 +56,10 @@ apps:
     factory: tamatebako/tebako-runtime-openjdk
     runtimes:
       - {version: "21.0.12", tebako: "2.7.0", release: "v2.7.0"}
-    platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
+    # The openjdk factory ships three platforms today (linux-gnu-x86_64,
+    # macos-arm64, windows-ucrt64) — aarch64-linux and x86_64-macos legs
+    # join when the factory ships those packages.
+    platforms: [x86_64-linux-gnu, aarch64-macos, x86_64-windows-ucrt]
 
 # The leg topology (host runner per triplet). Every leg is runner-native
 # — this suite compiles nothing (the java app launches from source).
@@ -64,7 +67,7 @@ ci:
   hosts:
     x86_64-linux-gnu: "ubuntu-22.04"
     aarch64-linux-gnu: "ubuntu-22.04-arm"
-    x86_64-macos: "macos-15"
+    x86_64-macos: "macos-15-intel"   # macos-15 itself is arm64; Intel legs need the -intel label
     aarch64-macos: "macos-latest"
     x86_64-windows-ucrt: "windows-2022"
 

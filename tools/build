@@ -25,6 +25,10 @@
 set -euo pipefail
 
 FEEDSTOCK="$(cd "$(dirname "$0")/.." && pwd)"
+# Native windows tools (ruby, the tfs CLI) cannot read Git Bash's POSIX
+# path spellings — FEEDSTOCK goes windows-form where cygpath exists
+# (inert on POSIX; Git Bash's own tools accept the D:/… form too).
+if command -v cygpath >/dev/null 2>&1; then FEEDSTOCK="$(cygpath -m "$FEEDSTOCK")"; fi
 die() { echo "build: $*" >&2; exit 1; }
 step() { printf '\n== %s\n' "$*"; }
 

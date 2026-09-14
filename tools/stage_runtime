@@ -24,10 +24,10 @@
 #                  sorted by filename ARE the manifest.json entries (a
 #                  partial mirror never advertises bytes it does not
 #                  carry), and SHA256SUMS.txt is the staged sidecars'
-#                  sums-form convenience. The .abi sidecar tools/build
-#                  consumes is FLOWED from the shard's own `abi` key (the
-#                  factory's value, not re-authored — the release ships
-#                  no .abi asset).
+#                  sums-form convenience. When the shard carries an `abi`
+#                  key it is FLOWED into a .abi sidecar (the factory's
+#                  value, not re-authored — the release ships no .abi
+#                  asset; jvm runtimes carry no abi facet, so no sidecar).
 #                  The windows package is THREE artifacts (<stem>.exe +
 #                  <stem>.dll + <stem>.tfs, vs the POSIX suffixless exe +
 #                  .tfs): the .dll is verified against its own sidecar ↔
@@ -43,7 +43,10 @@
 #                  DERIVE the release index from the packages' own
 #                  sidecars (.contract.yaml + .abi — the same fields
 #                  scripts/upload_release.rb folds into a published
-#                  manifest entry).
+#                  manifest entry). This channel mirrors the PYTHON
+#                  factory's package shape (its entries carry
+#                  python_version); the release channel is the portable
+#                  one — use it for every other engine.
 #
 # Workflow run artifacts are NOT a durable registry (retention-days: 1):
 # the mirror they produce is a LOCAL staging product (out/, gitignored);
@@ -131,7 +134,7 @@ case "$CHANNEL" in
       grep -E "$re" "$listing" >> "$SHARDS" || true
     done
     sort -u -o "$SHARDS" "$SHARDS"
-    [ -s "$SHARDS" ] || die "no shard on $FACTORY_REPO $RELEASE_TAG matches python $RT_V (+ variants) on: $HOST_IDS"
+    [ -s "$SHARDS" ] || die "no shard on $FACTORY_REPO $RELEASE_TAG matches runtime $RT_V (+ variants) on: $HOST_IDS"
     # Per stem: the shard FIRST (its fields name every other asset — the
     # exe/image/dll spellings are read from it, never composed), then the
     # assets it names + their .sha256 sidecars. Fetches ride curl against
@@ -193,30 +196,36 @@ if [ "$CHANNEL" = "release" ]; then
     # 1. Shard-internal parity + identity (ONE ruby per shard): sidecar
     #    digests ↔ the shard's own digest fields, the identity triple, the
     #    stem recomposition (a factory rename or a wrong-line shard fails
-    #    here loudly), and the python line as the pin EXACTLY or a
+    #    here loudly), and the language line as the pin EXACTLY or a
     #    pin-suffixed variant (the variant-in-version grammar the
-    #    selection regex expresses). The windows shard's dll facet is
-    #    validated the same way (install_as must be a bare PE name — the
-    #    resolver's own guard, mirrored here so a malformed facet fails
-    #    at staging). Prints, in fixed order: exe asset, image asset, dll
-    #    asset (empty when none), install_as (empty when none), and the
-    #    abi — the shard's OWN key, flowed (never re-authored) into the
-    #    .abi sidecar tools/build consumes.
+    #    selection regex expresses). The language-version key is
+    #    DISCOVERED, never assumed: every factory names it after its
+    #    engine (ruby_version / python_version / java_version) — exactly
+    #    one non-tebako, non-contract *_version key must exist. The
+    #    windows shard's dll facet is validated the same way (install_as
+    #    must be a bare PE name — the resolver's own guard, mirrored
+    #    here so a malformed facet fails at staging). Prints, in fixed
+    #    order: exe asset, image asset, dll asset (empty when none),
+    #    install_as (empty when none), and the abi — the shard's OWN key,
+    #    flowed (never re-authored) into the .abi sidecar; `-` when the
+    #    shard carries none (jvm runtimes have no native-abi facet).
     shard_fields="$(ruby -rjson -e '
       $stdout.binmode
-      shard_path, stem, rt, py_pin, host = ARGV
+      shard_path, stem, rt, lang_pin, host = ARGV
       shard = JSON.parse(File.read(shard_path))
       dir = File.dirname(shard_path)
       sidecar = ->(a) { File.read(File.join(dir, "#{a}.sha256")).split.first }
+      vkeys = shard.keys.grep(/_version\z/) - %w[tebako_version contract_version]
+      abort("stage_runtime: #{shard["filename"]}: expected exactly one language-version key, found #{vkeys.inspect}") unless vkeys.one?
+      lang = shard[vkeys.first].to_s
       checks = {
         "shard tebako_version" => [shard["tebako_version"], rt],
         "shard platform" => [shard["platform"], host],
         "shard exe sha256" => [shard["sha256"], sidecar.(shard["filename"])],
         "shard image sha256" => [shard.dig("image", "sha256"), sidecar.(shard.dig("image", "filename"))],
-        "stem recomposition" => ["tebako-runtime-#{shard["tebako_version"]}-#{shard["python_version"]}-#{shard["platform"]}", stem],
+        "stem recomposition" => ["tebako-runtime-#{shard["tebako_version"]}-#{lang}-#{shard["platform"]}", stem],
       }
-      py = shard["python_version"].to_s
-      checks["shard python_version"] = [py, py_pin] unless py == py_pin || py.start_with?("#{py_pin}-")
+      checks["shard #{vkeys.first}"] = [lang, lang_pin] unless lang == lang_pin || lang.start_with?("#{lang_pin}-")
       if (dll = shard["dll"])
         checks["dll sha256"] = [dll["sha256"], sidecar.(dll["filename"])]
         install_as = dll["install_as"].to_s
@@ -225,10 +234,10 @@ if [ "$CHANNEL" = "release" ]; then
         end
       end
       checks.each { |k, (got, want)| got == want or abort("stage_runtime: #{k} divergence: #{got.inspect} != #{want.inspect}") }
-      abi = shard["abi"] or abort("stage_runtime: shard for #{shard["filename"]} carries no abi key")
-      puts shard["filename"], shard.dig("image", "filename"), shard.dig("dll", "filename").to_s, shard.dig("dll", "install_as").to_s, abi
+      puts shard["filename"], shard.dig("image", "filename"), shard.dig("dll", "filename").to_s, shard.dig("dll", "install_as").to_s, shard["abi"] || "-"
     ' "$REL_DL/$shard" "$stem" "$RT_TEBAKO" "$RT_V" "$host_of_stem")" || die "digest parity failed for $shard"
     { IFS= read -r exe_asset; IFS= read -r img_asset; IFS= read -r dll_asset; IFS= read -r install_as; IFS= read -r abi; } <<< "$shard_fields"
+    [ "$abi" = "-" ] && abi=""
     # 2. The bytes against their .sha256 sidecars (the trust anchor) —
     #    exe, env image, and the windows dll when the shard names one.
     for asset in "$exe_asset" "$img_asset" ${dll_asset:+"$dll_asset"}; do
@@ -255,7 +264,7 @@ if [ "$CHANNEL" = "release" ]; then
       cp "$DEST/$dll_asset" "$DEST/$install_as"
       chmod 444 "$DEST/$install_as" 2>/dev/null || true
     fi
-    printf '%s\n' "$abi" > "$DEST/$stem.abi"
+    [ -n "$abi" ] && printf '%s\n' "$abi" > "$DEST/$stem.abi"
     chmod 755 "$DEST/$exe_asset" 2>/dev/null || true
     chmod 444 "$DEST/$img_asset"
     echo "  $stem: $(sha256_file "$DEST/$exe_asset")"
@@ -356,7 +365,11 @@ RUNTIME_EXE=$DEST/tebako-runtime-$RT_TEBAKO-$RT_V-\$HOST_ID
 RUNTIME_IMAGE=$DEST/tebako-runtime-$RT_TEBAKO-$RT_V-\$HOST_ID.tfs
 EOF
 
-step "staged: python $RT_V runtime (tebako $RT_TEBAKO), $CHANNEL channel"
+step "staged: runtime $RT_V (tebako $RT_TEBAKO), $CHANNEL channel"
+# The store config key is the ENGINE name; the factory repo basename
+# carries it (tebako-runtime-openjdk builds the java engine).
+ENGINE_HINT="${FACTORY_REPO##*/}"; ENGINE_HINT="${ENGINE_HINT#tebako-runtime-}"
+[ "$ENGINE_HINT" = "openjdk" ] && ENGINE_HINT=java
 echo "mirror:  $MIRROR"
 echo "use:     export TEBAKO_RUNTIME_MIRROR=file://$MIRROR"
-echo "         config.yaml runtimes: {python: {version: \"$RT_V\", tebako: \"$RT_TEBAKO\"}}"
+echo "         config.yaml runtimes: {$ENGINE_HINT: {version: \"$RT_V\", tebako: \"$RT_TEBAKO\"}}"
