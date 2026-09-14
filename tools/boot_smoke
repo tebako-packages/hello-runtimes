@@ -25,10 +25,12 @@ RUNTIME="${RUNTIME:?set RUNTIME to the staged runtime exe (runtime.env)}"
 RUNTIME_IMAGE="${RUNTIME_IMAGE:?set RUNTIME_IMAGE to the runtime env .tfs}"
 
 # Native windows binaries (tfs, tebako, the runtime exe) cannot read Git
-# Bash's POSIX path spellings; the `--tebako-image=<path>:-:/` argument
-# must also never ride MSYS's path-mangling (the `:-:/` grammar is ours).
-# Everything handed to a native binary goes windows-form where cygpath
-# exists (inert on POSIX).
+# Bash's POSIX path spellings — and MSYS's argument conversion rewrites
+# ANY argument that looks POSIX (it turned the IN-IMAGE virtual path
+# /app/hello.rb into C:/Program Files/Git/app/hello.rb on the windows
+# leg). So conversion is disabled WHOLESALE here and every host path
+# handed to a native binary goes windows-form explicitly via nat()
+# (inert on POSIX).
 nat() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
 abs() { # resolve to absolute without requiring the path to be a dir
   local d b; d="$(cd "$(dirname "$1")" && pwd)"; b="$(basename "$1")"; printf '%s/%s' "$d" "$b"
@@ -39,7 +41,7 @@ RUNTIME="$(nat "$RUNTIME")"; RUNTIME_IMAGE="$(nat "$RUNTIME_IMAGE")"
 # The windows tool assets carry the .exe suffix — resolve it where present.
 [ -e "$TFS" ] || [ ! -e "$TFS.exe" ] || TFS="$TFS.exe"
 [ -e "$TEBAKO" ] || [ ! -e "$TEBAKO.exe" ] || TEBAKO="$TEBAKO.exe"
-export MSYS2_ARG_CONV_EXCL="--tebako-image;--tebako-entry"
+export MSYS2_ARG_CONV_EXCL="*"
 
 case "$APP" in
   hello-ruby)   ENTRY=/app/hello.rb;   ENGINE=ruby ;;
