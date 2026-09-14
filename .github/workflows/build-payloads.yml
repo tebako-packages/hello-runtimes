@@ -45,8 +45,7 @@ jobs:
     needs: plan
     strategy:
       fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}   # pins.rb emits {"include": [...]}
     name: ${{ matrix.app }} (${{ matrix.triplet }})
     runs-on: ${{ matrix.runner }}
     defaults:
