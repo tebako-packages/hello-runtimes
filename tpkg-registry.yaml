@@ -1,6 +1,86 @@
 schema_version: 1
-# The hello-runtimes registry — the publish job fills this on each
-# release (the registry lands by bot PR; main is protected). Until the
-# first publish lands this document carries no payloads (a payload with
-# an empty versions list is invalid — the validator fails closed).
-payloads: []
+payloads:
+- name: hello-ruby
+  kind: app
+  versions:
+  - version: '1.0.0'
+    platforms:
+      aarch64-macos:
+        artifact: hello-ruby-1.0.0-macos-arm64.tfs
+        sha256: '365970caf29af47c26fd60d060aaeeb5410d6bf8153ffa62e8b5fafd9eb46a38'
+      x86_64-macos:
+        artifact: hello-ruby-1.0.0-macos-x86_64.tfs
+        sha256: '00ab1ca776ac14f05f90d9ce5a6b56b12a0ba46edc11b7451145aca4740870f9'
+      x86_64-linux-gnu:
+        artifact: hello-ruby-1.0.0-linux-gnu-x86_64.tfs
+        sha256: '766591a02c8dc7bd0b466a0afe8716f19810373141db2d2827a85fbd6952a795'
+      aarch64-linux-gnu:
+        artifact: hello-ruby-1.0.0-linux-gnu-arm64.tfs
+        sha256: '8ecfd6621ac449813e910c1b39fabdb6ba5f0e06b0919e4b4723ac784b8a29ba'
+      x86_64-windows-ucrt:
+        artifact: hello-ruby-1.0.0-windows-ucrt64.tfs
+        sha256: '14cdc3ddafb0b37de8c0fd865e0bed4f4bfd5af58caaebd0e978619368620721'
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.0
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-ruby-1.0.0-linux-gnu-x86_64.tfs.asc
+    runtime_requirement:
+      engine: ruby
+      constraint: '>= 3.3, < 5.0'
+    entrypoints:
+    - hello-ruby
+  default: '1.0.0'
+- name: hello-python
+  kind: app
+  versions:
+  - version: '1.0.0'
+    platforms:
+      aarch64-macos:
+        artifact: hello-python-1.0.0-macos-arm64.tfs
+        sha256: '9cadea71f496f96b132f1d0c840408002253c1ba080a6a8dad64cd2f925f7f86'
+      x86_64-macos:
+        artifact: hello-python-1.0.0-macos-x86_64.tfs
+        sha256: ecb7260f817adad7c1e97ac490c12326f97117b4fe7cca7170f801f8cf3581e2
+      x86_64-linux-gnu:
+        artifact: hello-python-1.0.0-linux-gnu-x86_64.tfs
+        sha256: '036324c7097a07ff56471da866a6a540079cce750605274bb38700b50170ab73'
+      aarch64-linux-gnu:
+        artifact: hello-python-1.0.0-linux-gnu-arm64.tfs
+        sha256: '162f0125af40785e4d7ee8f5c5067f7ebe175c4c46a058cc0c7eab877191f5f6'
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.0
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-python-1.0.0-linux-gnu-x86_64.tfs.asc
+    runtime_requirement:
+      engine: python
+      constraint: '>= 3.13, < 4.0'
+    entrypoints:
+    - hello-python
+  default: '1.0.0'
+- name: hello-java
+  kind: app
+  versions:
+  - version: '1.0.0'
+    platforms:
+      aarch64-macos:
+        artifact: hello-java-1.0.0-macos-arm64.tfs
+        sha256: d7b47bfe076bbddbeb66c08ad970b24fba5a239292c0a6a438fa14030dfbb8e3
+      x86_64-linux-gnu:
+        artifact: hello-java-1.0.0-linux-gnu-x86_64.tfs
+        sha256: a2250494b5b462321a3360008b557ed176edfdbff526e0ab5f10685cfdc69b9c
+      x86_64-windows-ucrt:
+        artifact: hello-java-1.0.0-windows-ucrt64.tfs
+        sha256: '45c674425f92ceff91fa5720e5f42418713dee3a8cd596667bf4e4bd537c54c7'
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.0
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-java-1.0.0-linux-gnu-x86_64.tfs.asc
+    runtime_requirement:
+      engine: java
+      constraint: '>= 21'
+    entrypoints:
+    - hello-java
+  default: '1.0.0'
