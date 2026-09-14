@@ -227,28 +227,30 @@ jobs:
           mkdir -p "$TEBAKO_HOME/keys"
           printf '%s\n' "$TEBAKO_SIGNING_KEY" > "$TEBAKO_HOME/keys/ci-signing.key"
           chmod 600 "$TEBAKO_HOME/keys/ci-signing.key"
+          mirror="$(mktemp -d)"
           for app in hello-ruby hello-python hello-java; do
-            # The clean-cache verify installs from the JUST-uploaded
-            # release; GitHub's asset listing lags the upload by a beat
-            # (proven live: ruby green, python's listing raced 7s later).
-            # Retry bounded ONLY on that signature — any other failure is
-            # terminal on first sight.
-            attempt=1
-            while :; do
-              log="$(mktemp)"
-              # shellcheck disable=SC2046  # --payload-args MUST word-split into the per-triplet --payload pairs
-              if "$TEBAKO_CLI" publish --sign="$SIGNING_KEYID" --name "$app" \
-                  --release "tfs:github:tebako-packages/hello-runtimes:${{ github.ref_name }}" \
-                  $(ruby tools/pins.rb --payload-args "$app") \
-                  --registry-out "$PWD/tpkg-registry.yaml" 2>&1 | tee "$log"; then
-                break
-              elif grep -q "carries no asset named" "$log" && [ "$attempt" -lt 4 ]; then
-                echo "::warning::publish verify raced the release asset index (attempt $attempt) — retrying in 20s"
-                sleep 20; attempt=$((attempt + 1))
-              else
-                echo "::error::publish failed for $app"; exit 1
-              fi
-            done
+            # shellcheck disable=SC2046  # --payload-args MUST word-split into the per-triplet --payload pairs
+            args="$(ruby tools/pins.rb --payload-args "$app")"
+            # 1. PROVE, zero network: the full clean-cache install
+            #    (registry resolution, sha pins, signature check, shim
+            #    dispatch) against a file:// mirror of the release. The
+            #    live listing read would be UNAUTHENTICATED on v2.8.2 —
+            #    a coin flip against the CI NAT pool's shared 60/h
+            #    anonymous bucket (proven drained mid-job live), plus a
+            #    read-after-write race with the asset index.
+            "$TEBAKO_CLI" publish --sign="$SIGNING_KEYID" --name "$app" \
+              --release "tfs:github:tebako-packages/hello-runtimes:${{ github.ref_name }}" \
+              $args \
+              --registry-out "$PWD/tpkg-registry.yaml" \
+              --upload-mirror "$mirror"
+            # 2. SHIP: authenticated API calls only (ensure-release +
+            #    uploads). The mirror leg already proved the install —
+            #    the uploaded bytes are the same files.
+            "$TEBAKO_CLI" publish --sign="$SIGNING_KEYID" --name "$app" \
+              --release "tfs:github:tebako-packages/hello-runtimes:${{ github.ref_name }}" \
+              $args \
+              --registry-out "$PWD/tpkg-registry.yaml" \
+              --skip-verify
           done
 
       - name: Registry PR (main is protected)
