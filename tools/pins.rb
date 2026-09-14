@@ -19,6 +19,11 @@
 require "json"
 require "yaml"
 
+# Native windows ruby terminates text-mode lines with CRLF and bash's
+# `read` keeps the \r — a tainted field malforms every consumer (the
+# release tag becomes "v0.16.23\r" and gh answers "release not found").
+$stdout.binmode
+
 RECIPE = YAML.load_file(File.join(__dir__, "..", "recipe.yml")).freeze
 
 # triplet → factory host_id (Platform::HOST_IDS) — asserted identical in
