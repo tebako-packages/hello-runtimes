@@ -57,7 +57,7 @@ payloads:
       constraint: '>= 3.3, < 5.0'
     entrypoints:
     - hello-ruby
-  default: '1.0.0'
+  default: '1.0.1'
 - name: hello-python
   kind: app
   versions:
@@ -109,7 +109,7 @@ payloads:
       constraint: '>= 3.13, < 4.0'
     entrypoints:
     - hello-python
-  default: '1.0.0'
+  default: '1.0.1'
 - name: hello-java
   kind: app
   versions:
@@ -156,4 +156,4 @@ payloads:
       implementation: temurin
     entrypoints:
     - hello-java
-  default: '1.0.0'
+  default: '1.0.1'

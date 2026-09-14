@@ -253,6 +253,13 @@ jobs:
               --skip-verify
           done
 
+      - name: Registry default tracks the suite line
+        # The suite versions together (recipe.yml): a publish moves every
+        # payload's registry `default:` to the tag's version. `tebako
+        # publish` deliberately never moves an existing default (a default
+        # moves by explicit act only) — this tool call is the suite's.
+        run: ruby tools/registry_default tpkg-registry.yaml "${{ github.ref_name }}"
+
       - name: Registry PR (main is protected)
         run: |
           set -euo pipefail

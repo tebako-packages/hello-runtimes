@@ -1,0 +1,48 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# registry_default REGISTRY VERSION — the suite's publish-time default
+# policy.
+#
+# The suite versions together (recipe.yml: "every payload in the suite
+# versions together"), so a publish moves every payload's registry
+# `default:` to the tag's version. The product's registry upsert
+# deliberately never moves an existing default (tebako-cli publish.rs:
+# "a new payload's default starts at its first version" — a default moves
+# by explicit act only); THIS tool is the suite's explicit act, run by
+# the build-payloads publish job after the per-app `tebako publish`
+# upserts, before the registry bot PR.
+#
+# Line-level edit only: the product serializer owns every other byte of
+# the file (a YAML load/dump round-trip would reflow it and churn every
+# bot PR). Fails named when no `default:` line exists to move.
+
+path = ARGV[0]
+version = ARGV[1]
+if path.nil? || version.nil? || version.empty?
+  warn "usage: registry_default REGISTRY VERSION"
+  exit 64
+end
+
+unless File.file?(path)
+  warn "registry_default: #{path} does not exist — the publish step writes it first"
+  exit 66
+end
+
+lines = File.readlines(path)
+moved = 0
+out = lines.map do |line|
+  if line.start_with?("  default: ")
+    moved += 1
+    "  default: '#{version}'\n"
+  else
+    line
+  end
+end
+if moved.zero?
+  warn "registry_default: #{path} carries no `default:` lines — nothing to move"
+  exit 65
+end
+
+File.write(path, out.join)
+puts "registry_default: moved #{moved} payload default(s) to #{version}"
