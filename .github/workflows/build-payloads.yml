@@ -208,6 +208,9 @@ jobs:
         env:
           TEBAKO_RUNTIME_MIRROR: file://${{ github.workspace }}/out/runtime-mirror
           TEBAKO_SIGNING_KEY: ${{ secrets.TEBAKO_CI_SIGNING_KEY }}
+          # The upload rides the live GitHub API — the CLI wants its own
+          # token spelling (job-level GH_TOKEN serves gh only).
+          TEBAKO_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           TEBAKO_CLI="$PWD/.tools/tebako"
