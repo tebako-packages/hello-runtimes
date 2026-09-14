@@ -63,7 +63,11 @@ def tool_env(triplet)
     "TEBAKO_ASSET" => "tebako-#{ver}-#{host}#{suffix}",
     "TEBAKO_SHA256" => dig.fetch("tebako"),
     "TFS_ASSET" => "tfs-#{ver}-#{host}#{suffix}",
-    "TFS_SHA256" => dig.fetch("tfs")
+    "TFS_SHA256" => dig.fetch("tfs"),
+    # The publish verify installs the payload — the dispatcher binary
+    # must sit beside the CLI (shims point at it).
+    "SHIM_ASSET" => "tebako-shim-#{ver}-#{host}#{suffix}",
+    "SHIM_SHA256" => dig.fetch("shim")
   }
 end
 

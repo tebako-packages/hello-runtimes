@@ -160,9 +160,15 @@ jobs:
           mkdir -p .tools && cd .tools
           base="https://github.com/tamatebako/tebako/releases/download/$TEBAKO_RELEASE"
           curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TEBAKO_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$SHIM_ASSET"
           curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/SHA256SUMS"
           echo "$TEBAKO_SHA256  $TEBAKO_ASSET" | shasum -a 256 -c -
-          chmod +x "$TEBAKO_ASSET" && mv "$TEBAKO_ASSET" tebako
+          echo "$SHIM_SHA256  $SHIM_ASSET" | shasum -a 256 -c -
+          chmod +x "$TEBAKO_ASSET" "$SHIM_ASSET"
+          # The publish verify installs the payload — the dispatcher must
+          # sit BESIDE the CLI (shims resolve it sibling-wise).
+          mv "$TEBAKO_ASSET" tebako
+          mv "$SHIM_ASSET" tebako-shim
 
       - uses: actions/download-artifact@v4
         with:
