@@ -1,7 +1,9 @@
 /**
  * hello-java — the tebako sample app on the openjdk runtime.
- * Single-file source-code launch (java 11+): the driver runs
- * `java /app/Hello.java <args>` — no compilation step anywhere.
+ * tools/build compiles this to /app/hello.jar (Main-Class: Hello); the
+ * driver composes `java -jar /app/hello.jar <args>` (spec 29 §1). The
+ * openjdk runtime is a JRE — no jdk.compiler module — so single-file
+ * source launch is not the payload form.
  */
 public class Hello {
     public static void main(String[] args) {

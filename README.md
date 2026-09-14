@@ -9,7 +9,7 @@ payload images and OS-native installers.
 |---|---|---|---|
 | `hello-ruby` | tebako-runtime-ruby | `>= 3.3, < 5.0` (range — pure-language) | linux-gnu ×2, macOS ×2, windows-ucrt |
 | `hello-python` | tebako-runtime-python | `>= 3.13, < 4.0` | linux-gnu ×2, macOS ×2 (windows waits on the factory's mount tier) |
-| `hello-java` | tebako-runtime-openjdk | `>= 21` | linux-gnu ×2, macOS ×2, windows-ucrt |
+| `hello-java` | tebako-runtime-openjdk | `>= 21` | linux-gnu x86_64, macOS arm64, windows-ucrt (the factory's three) |
 
 ## Why this suite exists
 
@@ -31,9 +31,12 @@ dispatch path, or a signing surface regressed.
   only to native extensions — see the xml2rfc feedstock for that shape).
   One `hello-ruby` payload rides ruby 3.3 and 4.0 alike; the legs stage
   both published lines and smoke the same bytes against each.
-- **Nothing compiles.** The apps are copied verbatim (the java app
-  launches from source — java 11+ single-file source-code programs), so
-  no toolchain ever runs here — audiences 1–3 by construction.
+- **Nothing tebako-side compiles.** The apps are copied verbatim — the
+  one exception is the java app, whose OWN source compiles to a jar with
+  the runner's hosted JDK (audience law 3: a runnable-payload developer
+  compiles only their own code; the openjdk runtime is a JRE, so the jar
+  with `args_default: ["-jar"]` is the payload form — spec 29 §1's own
+  example shape). No tebako machinery ever compiles here.
 - **Shard-model runtime staging.** `tools/stage_runtime` consumes the
   factories' per-leg shard releases (manifest shards + per-asset
   sidecars + `.asc`), verifies every staged byte three ways, and derives

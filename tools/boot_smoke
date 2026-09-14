@@ -44,7 +44,7 @@ export MSYS2_ARG_CONV_EXCL="--tebako-image;--tebako-entry"
 case "$APP" in
   hello-ruby)   ENTRY=/app/hello.rb;   ENGINE=ruby ;;
   hello-python) ENTRY=/app/hello.py;   ENGINE=python ;;
-  hello-java)   ENTRY=/app/Hello.java; ENGINE=java ;;
+  hello-java)   ENTRY=/app/hello.jar;  ENGINE=java ;;
   *) echo "boot_smoke: unknown APP: $APP" >&2; exit 1 ;;
 esac
 

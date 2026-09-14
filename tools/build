@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # tools/build — assemble one sample app's payload tree and image it.
-# Nothing compiles and NOTHING runs at build time (the apps are
-# stdlib-only sources; the java app launches from source — java 11+
-# single-file source-code programs), so the builder needs no staged
-# runtime — boot_smoke stages the runtime line(s) and executes.
+# Nothing tebako-side compiles; the only compilation is the JAVA app's
+# own source (audience law 3: a runnable-payload developer compiles only
+# their own code) — javac+jar come from the runner's hosted JDK, and the
+# payload ships the jar (the openjdk runtime is a JRE: no jdk.compiler
+# module, so single-file source launch cannot run on it; the jar entry
+# with args_default ["-jar"] is spec 29 §1's own example shape).
 #
 # Flow:
-#   1. locate the staged runtime pair in tools/stage_runtime's file://
-#      mirror (the legs stage it first)
-#   2. tree = the app's sources at /app + the rendered manifest at
+#   1. tree = the app's payload files at /app + the rendered manifest at
 #      /__tpkg__/manifest.yaml (blob_sha256's fixed-point rule, spec 03
 #      §7: the embedded copy keeps the zero placeholder; the sibling
-#      manifest carries the real one for the release/registry tier)
-#   3. the declared entrypoint must exist in the tree (drift = named
+#      manifest carries the real one for the release/registry tier).
+#      The java app's payload file is the jar built from apps/<app>/src.
+#   2. the declared entrypoint must exist in the tree (drift = named
 #      error, never a partial payload)
-#   4. tfs mkimage (default limnifs — the format the factories ship)
+#   3. tfs mkimage (default limnifs — the format the factories ship)
 #
 # Inputs (env, from tools/pins.rb --env; no literals here):
 #   APP        the sample app (apps/<app>/ + manifests/<app>.yaml)
@@ -51,12 +52,35 @@ step "assemble the $APP payload tree"
 PAYLOAD="$WORK/payload"
 rm -rf "$PAYLOAD"
 mkdir -p "$PAYLOAD/app" "$PAYLOAD/__tpkg__"
-cp "$FEEDSTOCK/apps/$APP/"* "$PAYLOAD/app/"
+if [ -d "$FEEDSTOCK/apps/$APP/src" ]; then
+  # The java app: compile OUR OWN source with the runner's hosted JDK
+  # and ship the jar (JRE-class runtime — no source launch). JAVA_HOME
+  # discovery: the hosted-toolcache 21 line first (x64 + arm64 spellings),
+  # else a javac already on PATH; a java app on a java-less runner is a
+  # named error. Native javac needs windows-form paths — PAYLOAD already
+  # is (FEEDSTOCK goes through cygpath); the JDK home goes POSIX for exec.
+  step "compile the jar (hosted JDK, --release 21 matches the >= 21 constraint)"
+  JH="${JAVA_HOME_21_X64:-${JAVA_HOME_21_ARM64:-}}"
+  if [ -z "$JH" ] && command -v javac >/dev/null 2>&1; then
+    JH="$(cd "$(dirname "$(command -v javac)")/.." && pwd)"
+  fi
+  [ -n "$JH" ] || die "no hosted JDK 21 and no javac on PATH (a java leg needs a JDK — the JRE runtime cannot compile)"
+  if command -v cygpath >/dev/null 2>&1; then JH="$(cygpath -u "$JH")"; fi
+  [ -x "$JH/bin/javac" ] || die "javac not found under JDK home: $JH"
+  mkdir -p "$WORK/classes"
+  "$JH/bin/javac" --release 21 -d "$WORK/classes" "$FEEDSTOCK/apps/$APP/src/Hello.java"
+  # cfe: jar with the Main-Class manifest entry (the -jar entry needs it).
+  "$JH/bin/jar" cfe "$PAYLOAD/app/hello.jar" Hello -C "$WORK/classes" .
+else
+  cp "$FEEDSTOCK/apps/$APP/"* "$PAYLOAD/app/"
+fi
 
 MAN="$FEEDSTOCK/manifests/$APP.yaml"
 [ -f "$MAN" ] || die "no manifest template: $MAN"
 # Every declared entrypoint must exist in the tree (drift = named error).
-ruby -ryaml -e 'YAML.load_file(ARGV[0]).fetch("provides").fetch("entrypoints").each { |e| puts e.fetch("path") }' "$MAN" \
+# ($stdout.binmode: NATIVE windows ruby terminates text-mode lines with
+# CRLF and `read` keeps the \r — the path would never stat true.)
+ruby -ryaml -e '$stdout.binmode; YAML.load_file(ARGV[0]).fetch("provides").fetch("entrypoints").each { |e| puts e.fetch("path") }' "$MAN" \
   | while read -r p; do
       [ -f "$PAYLOAD$p" ] || die "declared entrypoint $p not staged"
     done

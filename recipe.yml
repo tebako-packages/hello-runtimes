@@ -61,8 +61,9 @@ apps:
     # join when the factory ships those packages.
     platforms: [x86_64-linux-gnu, aarch64-macos, x86_64-windows-ucrt]
 
-# The leg topology (host runner per triplet). Every leg is runner-native
-# — this suite compiles nothing (the java app launches from source).
+# The leg topology (host runner per triplet). Every leg is runner-native;
+# only the java leg compiles — the app's own source, with the runner's
+# hosted JDK (audience law 3), never anything tebako-side.
 ci:
   hosts:
     x86_64-linux-gnu: "ubuntu-22.04"

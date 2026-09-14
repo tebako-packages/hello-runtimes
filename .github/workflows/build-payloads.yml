@@ -57,6 +57,16 @@ jobs:
       - name: Leg env (recipe.yml is the SSOT)
         run: ruby tools/pins.rb --env "${{ matrix.app }}" "${{ matrix.triplet }}" >> "$GITHUB_ENV"
 
+      - name: Set up the hosted JDK 21 (java legs only)
+        # The java app's payload is a jar compiled from its own source
+        # (audience law 3) — the JRE-class runtime cannot compile. The
+        # other engines' legs compile nothing and skip this entirely.
+        if: matrix.engine == 'java'
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6  # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
       - name: Fetch the pinned tebako tools (sha256-verified)
         run: |
           set -euo pipefail
