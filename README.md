@@ -9,7 +9,7 @@ payload images and OS-native installers.
 |---|---|---|---|
 | `hello-ruby` | tebako-runtime-ruby | `>= 3.3, < 5.0` (range — pure-language) | linux-gnu ×2, macOS ×2, windows-ucrt |
 | `hello-python` | tebako-runtime-python | `>= 3.13, < 4.0` | linux-gnu ×2, macOS ×2 (windows waits on the factory's mount tier) |
-| `hello-java` | tebako-runtime-openjdk | `>= 21` | linux-gnu x86_64, macOS arm64, windows-ucrt (the factory's three) |
+| `hello-java` | tebako-runtime-openjdk | `>= 21`, flavor-pinned to `temurin` | linux-gnu x86_64, macOS arm64, windows-ucrt (the factory's three) |
 
 ## Why this suite exists
 
@@ -72,8 +72,48 @@ as the signing credentials arrive (see the repo's open tracking issue).
 
 ## Try a published payload
 
+Requires tebako > v2.8.2. One-time setup — register this suite's registry:
+
 ```sh
 tebako add-registry tfs:github:tebako-packages/hello-runtimes
-tebako install hello-ruby
-hello-ruby        # Hello from tebako (ruby 4.0.6, arm64-darwin)
 ```
+
+Then per engine (each runtime arrives once per machine, into the shared
+cache):
+
+- **ruby — zero-config.** The product's default channel hosts ruby
+  runtimes; nothing else to register:
+
+  ```sh
+  tebako install hello-ruby
+  hello-ruby        # Hello from tebako (ruby 4.0.6, arm64-darwin23)
+  ```
+
+- **java — register the factory registry once.** The openjdk factory
+  publishes two flavors of `engine: java`; `hello-java` pins the default
+  flavor (`temurin`, spec 28 §8's implementation axis), so every machine
+  resolves the same runtime:
+
+  ```sh
+  tebako add-registry tfs:github:tamatebako/tebako-runtime-openjdk
+  tebako install hello-java
+  hello-java        # Hello from tebako (java 21.0.12, Mac OS X/aarch64)
+  ```
+
+  To ride the graalvm flavor instead, the manifest edge names
+  `implementation: graalvm` — a one-line change and a rebuild; the
+  factory registry serves both flavors.
+
+- **python — pin the source once (the factory registry lands with
+  tebako-runtime-python's registry renderer).** Add to
+  `~/.tebako/config.yaml`:
+
+  ```yaml
+  runtimes:
+    python:
+      version: "3.14.7"
+      tebako: "0.2.0"
+      source: "https://github.com/tamatebako/tebako-runtime-python/releases/download"
+  ```
+
+  then `tebako install hello-python && hello-python`.

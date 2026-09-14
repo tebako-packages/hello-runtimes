@@ -26,8 +26,15 @@ provides:
       # jar (not single-file source launch) is the payload form.
       path: /app/hello.jar
       args_default: ["-jar"]
+      # Pinned to the factory's default flavor: temurin (spec 28 §8's
+      # implementation axis). A bare `engine: java` edge resolves to the
+      # NEWEST satisfying runtime across every flavor the registries
+      # offer (graalvm outranks temurin on version order) — the pin keeps
+      # the sample deterministic. Ride graalvm instead by naming
+      # `implementation: graalvm` here (the openjdk registry serves both).
       runtime_requirement:
         engine: java
+        implementation: temurin
         constraint: ">= 21"
   platforms: []                   # filled by tools/build from the leg's
                                   # triplet (the template stays parseable)
@@ -35,6 +42,7 @@ provides:
 requires:
   - kind: language
     engine: java
+    implementation: temurin
     constraint: ">= 21"
 checks:
   run:
