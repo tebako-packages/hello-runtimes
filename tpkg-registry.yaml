@@ -1,0 +1,14 @@
+schema_version: 1
+# The hello-runtimes registry — the publish job fills the versions per
+# payload on each release (the registry lands by bot PR; main is
+# protected).
+payloads:
+- name: hello-ruby
+  kind: app
+  versions: []
+- name: hello-python
+  kind: app
+  versions: []
+- name: hello-java
+  kind: app
+  versions: []

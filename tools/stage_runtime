@@ -1,0 +1,362 @@
+#!/usr/bin/env bash
+# tools/stage_runtime — stage the pinned tebako runtime (any engine) into a
+# local file:// runtime MIRROR (spec 05 §2's download-base shape:
+# <mirror>/v<tebako>/manifest.json + SHA256SUMS.txt + the exe/image
+# assets), ready for TEBAKO_RUNTIME_MIRROR=file://<mirror> and the
+# store's `runtimes:` pin for the engine.
+#
+# Channels (README decision 4 — ONE variable, recipe.yml
+# build.runtime.channel):
+#   release        (the default) — the factory's SHARD model (factory
+#                  releases v0.2.0 and up): the release serves per-package
+#                  manifest shards (<stem>.manifest.json), per-asset
+#                  .sha256 sidecars and OpenPGP .asc signatures; the
+#                  monolithic manifest.json / SHA256SUMS.txt are no longer
+#                  release assets. Shards are enumerated with
+#                  `gh release view --json assets` and selected on the
+#                  pin's EXACT version plus its variant suffixes
+#                  (^tebako-runtime-<tbver>-<pin>(-[a-z0-9]+)?-<hostid>\.manifest\.json$).
+#                  Every staged byte is verified THREE ways: sidecar ↔
+#                  staged bytes ↔ the shard's own digest fields, plus the
+#                  filename identity (a divergence anywhere is a named
+#                  error, never a pick). The trimmed monoliths are then
+#                  DERIVED consumer-side into the mirror: the shards
+#                  sorted by filename ARE the manifest.json entries (a
+#                  partial mirror never advertises bytes it does not
+#                  carry), and SHA256SUMS.txt is the staged sidecars'
+#                  sums-form convenience. The .abi sidecar tools/build
+#                  consumes is FLOWED from the shard's own `abi` key (the
+#                  factory's value, not re-authored — the release ships
+#                  no .abi asset).
+#                  The windows package is THREE artifacts (<stem>.exe +
+#                  <stem>.dll + <stem>.tfs, vs the POSIX suffixless exe +
+#                  .tfs): the .dll is verified against its own sidecar ↔
+#                  the shard's `dll` facet, staged under its asset name
+#                  (the resolver fetches that spelling), and additionally
+#                  laid down under the facet's `install_as` PE name so the
+#                  mirror's exe runs where it lies (the interpreter import
+#                  resolves beside the exe).
+#   run-artifacts  (pre-publish proof builds only) — `gh run download`
+#                  the factory's publish.yml (publish=false)
+#                  runtime-packages-* artifacts of the pinned run, verify
+#                  each .tfs against its shipped .sha256 sidecar, and
+#                  DERIVE the release index from the packages' own
+#                  sidecars (.contract.yaml + .abi — the same fields
+#                  scripts/upload_release.rb folds into a published
+#                  manifest entry).
+#
+# Workflow run artifacts are NOT a durable registry (retention-days: 1):
+# the mirror they produce is a LOCAL staging product (out/, gitignored);
+# no release line ever references a run artifact.
+#
+# Inputs (env — required unless noted; the workflow supplies them from
+# tools/pins.rb, recipe.yml stays the SSOT):
+#   RT_V           the runtime's language version (e.g. 4.0.6, 3.14.7, 21.0.12)
+#   RT_TEBAKO      the runtime package's tebako line (the factory's VERSION)
+#   RELEASE_TAG    the factory release tag (release channel)
+#   FACTORY_REPO   the runtime factory (e.g. tamatebako/tebako-runtime-ruby)
+#   CHANNEL        release | run-artifacts  (default: release)
+#   FACTORY_RUN    the publish.yml run id (run-artifacts channel only —
+#                  a factory debug channel; no release line references it)
+#   MIRROR         output mirror dir (default: out/runtime-mirror)
+#   RUN_DL         run-artifact download dir (default: out/run-artifacts)
+#   REL_DL         release download dir (default: out/release-assets)
+#
+# Named errors everywhere; every byte that enters the mirror is hashed.
+set -euo pipefail
+
+FEEDSTOCK="$(cd "$(dirname "$0")/.." && pwd)"
+# Native windows tools (ruby, gh, the runtime exe) cannot read Git Bash's
+# POSIX path spellings — FEEDSTOCK goes windows-form where cygpath exists
+# (inert on POSIX).
+if command -v cygpath >/dev/null 2>&1; then FEEDSTOCK="$(cygpath -m "$FEEDSTOCK")"; fi
+
+die() { echo "stage_runtime: $*" >&2; exit 1; }
+RT_V="${RT_V:?stage_runtime: RT_V unset (the runtime's language version)}"
+RT_TEBAKO="${RT_TEBAKO:?stage_runtime: RT_TEBAKO unset (the runtime's tebako line)}"
+RELEASE_TAG="${RELEASE_TAG:?stage_runtime: RELEASE_TAG unset (the factory release tag)}"
+FACTORY_REPO="${FACTORY_REPO:?stage_runtime: FACTORY_REPO unset}"
+CHANNEL="${CHANNEL:-release}"
+FACTORY_RUN="${FACTORY_RUN:-}"
+MIRROR="${MIRROR:-$FEEDSTOCK/out/runtime-mirror}"
+RUN_DL="${RUN_DL:-$FEEDSTOCK/out/run-artifacts}"
+REL_DL="${REL_DL:-$FEEDSTOCK/out/release-assets}"
+
+step() { printf '\n== %s\n' "$*"; }
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  else
+    shasum -a 256 "$1" | cut -d' ' -f1
+  fi
+}
+
+# HOST_IDS is overridable: a CI leg stages only its own platform's
+# package. The default spans every host_id the factories ship (the suite
+# has windows legs — the ruby and java runtimes mount fine there; only
+# python's windows line waits on its factory's mount tier).
+HOST_IDS="${HOST_IDS:-linux-gnu-x86_64 linux-gnu-arm64 linux-musl-x86_64 linux-musl-arm64 macos-x86_64 macos-arm64 windows-ucrt64}"
+
+case "$CHANNEL" in
+  run-artifacts)
+    [ -n "$FACTORY_RUN" ] || die "no factory run pinned (recipe.yml build.runtime.factory_run)"
+    step "download run artifacts of $FACTORY_REPO run $FACTORY_RUN (runtime $RT_V)"
+    mkdir -p "$RUN_DL"
+    for host_id in $HOST_IDS; do
+      art="runtime-packages-$host_id-$RT_V"
+      if [ ! -d "$RUN_DL/$art" ]; then
+        gh run download "$FACTORY_RUN" --repo "$FACTORY_REPO" --name "$art" --dir "$RUN_DL/$art" \
+          || die "run-artifact download failed: $art (run $FACTORY_RUN — artifacts expire 1 day after the run)"
+      fi
+    done
+    ;;
+  release)
+    [ -n "$RELEASE_TAG" ] || die "no factory release pinned (recipe.yml build.runtime.release)"
+    step "download $FACTORY_REPO release $RELEASE_TAG (runtime $RT_V, tebako $RT_TEBAKO — shard model)"
+    mkdir -p "$REL_DL"
+    # Enumerate the release's assets once (gh's built-in --jq — no jq
+    # binary needed), then select each leg's shards on the pin's exact
+    # version + variant suffixes.
+    listing="$REL_DL/.assets.listing"
+    if [ ! -s "$listing" ]; then
+      gh release view "$RELEASE_TAG" --repo "$FACTORY_REPO" --json assets --jq '.assets[].name' > "$listing" \
+        || die "cannot enumerate $FACTORY_REPO release $RELEASE_TAG"
+    fi
+    re_escape() { printf '%s' "$1" | sed 's/[].[\*^$]/\\&/g'; }
+    SHARDS="$REL_DL/.shards"
+    : > "$SHARDS"
+    for host_id in $HOST_IDS; do
+      re="^tebako-runtime-$(re_escape "$RT_TEBAKO")-$(re_escape "$RT_V")(-[a-z0-9]+)?-$(re_escape "$host_id")\.manifest\.json\$"
+      grep -E "$re" "$listing" >> "$SHARDS" || true
+    done
+    sort -u -o "$SHARDS" "$SHARDS"
+    [ -s "$SHARDS" ] || die "no shard on $FACTORY_REPO $RELEASE_TAG matches python $RT_V (+ variants) on: $HOST_IDS"
+    # Per stem: the shard FIRST (its fields name every other asset — the
+    # exe/image/dll spellings are read from it, never composed), then the
+    # assets it names + their .sha256 sidecars. Fetches ride curl against
+    # the release-download URL (the URLs are public; the resolver fetches
+    # the same way). Idempotent per asset (a re-run re-verifies what it
+    # finds). Retried (a release-asset GET is a transient-prone edge
+    # fetch), and a failure reports curl's error text plus a probe of the
+    # status the URL actually answers — the CI log must name the failure
+    # mode.
+    dl() {
+      if [ ! -f "$REL_DL/$1" ]; then
+        local err; err="$(mktemp)"
+        if ! curl -sS -L --fail --retry 3 --retry-delay 2 --retry-all-errors \
+            -o "$REL_DL/$1" \
+            "https://github.com/$FACTORY_REPO/releases/download/$RELEASE_TAG/$1" 2>"$err"; then
+          local code
+          code="$(curl -sSIL -o /dev/null -w '%{http_code}' \
+            "https://github.com/$FACTORY_REPO/releases/download/$RELEASE_TAG/$1" 2>/dev/null || echo n/a)"
+          die "release asset download failed: $1 (tag $RELEASE_TAG) — curl: $(cat "$err"); the URL answers: ${code:-n/a}"
+        fi
+      fi
+    }
+    # ruby-to-bash pipe boundary: NATIVE windows ruby's text-mode stdout
+    # terminates lines with CRLF, and `read` (unlike command substitution)
+    # keeps the \r — a tainted asset name malforms every consumer (run
+    # 34801429467: curl (3) URL rejected). binmode at the source; the
+    # shard_fields ruby below takes the same shield.
+    while IFS= read -r shard; do
+      dl "$shard"
+      while IFS= read -r asset; do
+        dl "$asset"; dl "$asset.sha256"
+      done < <(ruby -rjson -e '
+        $stdout.binmode
+        s = JSON.parse(File.read(ARGV[0]))
+        abort("stage_runtime: #{ARGV[0]}: no filename field") unless s["filename"]
+        abort("stage_runtime: #{ARGV[0]}: no image.filename field") unless s.dig("image", "filename")
+        puts s["filename"], s["image"]["filename"]
+        puts s["dll"]["filename"] if s.dig("dll", "filename")
+      ' "$REL_DL/$shard")
+    done < "$SHARDS"
+    ;;
+  *) die "unknown channel: $CHANNEL (release | run-artifacts)" ;;
+esac
+
+step "assemble the mirror at $MIRROR/v$RT_TEBAKO"
+DEST="$MIRROR/v$RT_TEBAKO"
+rm -rf "$DEST"
+mkdir -p "$DEST"
+
+if [ "$CHANNEL" = "release" ]; then
+  : > "$DEST/SHA256SUMS.txt"
+  while IFS= read -r shard; do
+    stem="${shard%.manifest.json}"
+    # The stem's host_id (the shard was selected by this leg's regex, so
+    # exactly one HOST_IDS entry is its suffix — asserted, never assumed).
+    host_of_stem=""
+    for h in $HOST_IDS; do case "$stem" in *-"$h") host_of_stem="$h" ;; esac; done
+    [ -n "$host_of_stem" ] || die "shard $shard carries no known host_id suffix ($HOST_IDS)"
+    # 1. Shard-internal parity + identity (ONE ruby per shard): sidecar
+    #    digests ↔ the shard's own digest fields, the identity triple, the
+    #    stem recomposition (a factory rename or a wrong-line shard fails
+    #    here loudly), and the python line as the pin EXACTLY or a
+    #    pin-suffixed variant (the variant-in-version grammar the
+    #    selection regex expresses). The windows shard's dll facet is
+    #    validated the same way (install_as must be a bare PE name — the
+    #    resolver's own guard, mirrored here so a malformed facet fails
+    #    at staging). Prints, in fixed order: exe asset, image asset, dll
+    #    asset (empty when none), install_as (empty when none), and the
+    #    abi — the shard's OWN key, flowed (never re-authored) into the
+    #    .abi sidecar tools/build consumes.
+    shard_fields="$(ruby -rjson -e '
+      $stdout.binmode
+      shard_path, stem, rt, py_pin, host = ARGV
+      shard = JSON.parse(File.read(shard_path))
+      dir = File.dirname(shard_path)
+      sidecar = ->(a) { File.read(File.join(dir, "#{a}.sha256")).split.first }
+      checks = {
+        "shard tebako_version" => [shard["tebako_version"], rt],
+        "shard platform" => [shard["platform"], host],
+        "shard exe sha256" => [shard["sha256"], sidecar.(shard["filename"])],
+        "shard image sha256" => [shard.dig("image", "sha256"), sidecar.(shard.dig("image", "filename"))],
+        "stem recomposition" => ["tebako-runtime-#{shard["tebako_version"]}-#{shard["python_version"]}-#{shard["platform"]}", stem],
+      }
+      py = shard["python_version"].to_s
+      checks["shard python_version"] = [py, py_pin] unless py == py_pin || py.start_with?("#{py_pin}-")
+      if (dll = shard["dll"])
+        checks["dll sha256"] = [dll["sha256"], sidecar.(dll["filename"])]
+        install_as = dll["install_as"].to_s
+        if install_as.empty? || install_as.include?("/") || install_as.include?("\\")
+          abort("stage_runtime: dll facet of #{shard["filename"]} carries an unusable install_as (#{install_as.inspect}) — the PE name must be a bare file name")
+        end
+      end
+      checks.each { |k, (got, want)| got == want or abort("stage_runtime: #{k} divergence: #{got.inspect} != #{want.inspect}") }
+      abi = shard["abi"] or abort("stage_runtime: shard for #{shard["filename"]} carries no abi key")
+      puts shard["filename"], shard.dig("image", "filename"), shard.dig("dll", "filename").to_s, shard.dig("dll", "install_as").to_s, abi
+    ' "$REL_DL/$shard" "$stem" "$RT_TEBAKO" "$RT_V" "$host_of_stem")" || die "digest parity failed for $shard"
+    { IFS= read -r exe_asset; IFS= read -r img_asset; IFS= read -r dll_asset; IFS= read -r install_as; IFS= read -r abi; } <<< "$shard_fields"
+    # 2. The bytes against their .sha256 sidecars (the trust anchor) —
+    #    exe, env image, and the windows dll when the shard names one.
+    for asset in "$exe_asset" "$img_asset" ${dll_asset:+"$dll_asset"}; do
+      [ -f "$REL_DL/$asset" ] && [ -f "$REL_DL/$asset.sha256" ] \
+        || die "incomplete release download: missing $asset or $asset.sha256"
+      want="$(cut -d' ' -f1 < "$REL_DL/$asset.sha256")"
+      got="$(sha256_file "$REL_DL/$asset")"
+      [ "$got" = "$want" ] || die "SHA256 MISMATCH $asset: $got != $want (release sidecar)"
+    done
+    # 3. Stage the shard's bytes + sidecars + the shard itself.
+    cp "$REL_DL/$exe_asset" "$REL_DL/$img_asset" "$REL_DL/$shard" "$DEST/"
+    cp "$REL_DL/$exe_asset.sha256" "$REL_DL/$img_asset.sha256" "$DEST/"
+    cat "$REL_DL/$exe_asset.sha256" "$REL_DL/$img_asset.sha256" >> "$DEST/SHA256SUMS.txt"
+    if [ -n "$dll_asset" ]; then
+      cp "$REL_DL/$dll_asset" "$REL_DL/$dll_asset.sha256" "$DEST/"
+      cat "$REL_DL/$dll_asset.sha256" >> "$DEST/SHA256SUMS.txt"
+      chmod 444 "$DEST/$dll_asset" 2>/dev/null || true
+      # The exe imports the dll under its PE name — lay a same-dir copy so
+      # the mirror's exe runs where it lies (chmod is best-effort: under
+      # Git Bash the mode bits are virtualized).
+      if [ -e "$DEST/$install_as" ] && ! cmp -s "$DEST/$dll_asset" "$DEST/$install_as"; then
+        die "dll install_as collision: $install_as already staged with different bytes"
+      fi
+      cp "$DEST/$dll_asset" "$DEST/$install_as"
+      chmod 444 "$DEST/$install_as" 2>/dev/null || true
+    fi
+    printf '%s\n' "$abi" > "$DEST/$stem.abi"
+    chmod 755 "$DEST/$exe_asset" 2>/dev/null || true
+    chmod 444 "$DEST/$img_asset"
+    echo "  $stem: $(sha256_file "$DEST/$exe_asset")"
+  done < "$SHARDS"
+  # The trimmed monolith, derived consumer-side: each shard IS its
+  # manifest entry; deterministic order by filename. A partial mirror
+  # never advertises bytes it does not carry — the derived index spans
+  # exactly the staged stems.
+  shard_paths=()
+  while IFS= read -r s; do shard_paths+=("$REL_DL/$s"); done < "$SHARDS"
+  ruby -rjson -e '
+    out = ARGV.shift
+    shards = ARGV.map { |p| JSON.parse(File.read(p)) }.sort_by { |s| s["filename"] }
+    abort("stage_runtime: derived manifest is empty") if shards.empty?
+    File.binwrite("#{out}.tmp", JSON.pretty_generate(shards) + "\n")
+  ' "$DEST/manifest.json" "${shard_paths[@]}" || die "derived manifest.json failed"
+  mv "$DEST/manifest.json.tmp" "$DEST/manifest.json"
+  echo "  index: $DEST/manifest.json (derived from $(wc -l < "$SHARDS" | tr -d ' ') shard(s), trimmed to the staged stems) + SHA256SUMS.txt"
+else
+  # run-artifacts channel: exe + env image + .tfs.sha256 + .abi +
+  # .contract.yaml per package. The image rides its SHIPPED sidecar
+  # (verified here); the exe's sha256 run artifacts do not carry is
+  # computed over the downloaded bytes and enters the derived index (the
+  # install path re-verifies against it — tmp+rename, a mismatch never
+  # enters the store).
+  entries=""
+  : > "$DEST/SHA256SUMS.txt"
+  for host_id in $HOST_IDS; do
+    dir="$RUN_DL/runtime-packages-$host_id-$RT_V"
+    exe="tebako-runtime-$RT_TEBAKO-$RT_V-$host_id"
+    img="$exe.tfs"
+    for f in "$exe" "$img" "$img.sha256" "$exe.abi" "$exe.contract.yaml"; do
+      [ -f "$dir/$f" ] || die "incomplete runtime package $host_id: missing $f"
+    done
+    # Verify the image against its shipped sidecar BEFORE mirroring.
+    want="$(cut -d' ' -f1 < "$dir/$img.sha256")"
+    got="$(sha256_file "$dir/$img")"
+    [ "$got" = "$want" ] || die "SHA256 MISMATCH $img: $got != $want (shipped sidecar)"
+    # The package's own naming is asserted against the host_id grammar —
+    # a factory rename fails here loudly instead of mis-laying the mirror.
+    [ -f "$dir/$exe" ] || die "exe $exe absent from runtime-packages-$host_id-$RT_V"
+
+    exe_sha="$(sha256_file "$dir/$exe")"
+    exe_size="$(stat -f%z "$dir/$exe" 2>/dev/null || stat -c%s "$dir/$exe")"
+    img_size="$(stat -f%z "$dir/$img" 2>/dev/null || stat -c%s "$dir/$img")"
+    abi="$(tr -d '[:space:]' < "$dir/$exe.abi")"
+    [ -n "$abi" ] || die "empty abi sidecar for $exe"
+
+    cp "$dir/$exe" "$dir/$img" "$dir/$exe.abi" "$dir/$exe.contract.yaml" "$DEST/"
+    chmod 444 "$DEST/$img"
+    printf '%s  %s\n%s  %s\n' "$exe_sha" "$exe" "$got" "$img" >> "$DEST/SHA256SUMS.txt"
+
+    # The manifest entry (the shape scripts/upload_release.rb emits):
+    # identity triple + filename/sha256/size_bytes + the contract card
+    # (contract_era + mount_root from the package's own .contract.yaml;
+    # contract_version from the factory's contract.yml — era-2 python
+    # runtimes are contract 2 from the first publish, floored by the
+    # factory's schema) + the abi facet + the image facet.
+    entry="$(ruby -ryaml -rjson -e '
+      contract = YAML.load_file(ARGV[0])
+      puts JSON.generate({
+        tebako_version: ARGV[1],
+        contract_era: contract.fetch("contract_era"),
+        contract_version: 2,
+        python_version: ARGV[2],
+        platform: ARGV[3],
+        filename: ARGV[4],
+        sha256: ARGV[5],
+        size_bytes: ARGV[6].to_i,
+        mount_root: contract.fetch("mount_root"),
+        image_layout: contract.fetch("image_layout"),
+        built_from: contract.fetch("built_from"),
+        abi: ARGV[7],
+        image: { filename: ARGV[8], sha256: ARGV[9], size_bytes: ARGV[10].to_i }
+      })
+    ' "$dir/$exe.contract.yaml" "$RT_TEBAKO" "$RT_V" "$host_id" "$exe" "$exe_sha" "$exe_size" "$abi" "$img" "$got" "$img_size")"
+    entries="$entries$entry
+"
+    echo "  $host_id: exe $exe_sha"
+  done
+
+  # Assemble the monolithic index with ruby (valid JSON, one entry per package).
+  printf '%s' "$entries" | ruby -rjson -e '
+    docs = STDIN.read.split("\n").reject(&:empty?).map { |l| JSON.parse(l) }
+    puts JSON.pretty_generate(docs)
+  ' > "$DEST/manifest.json"
+  ruby -rjson -e 'JSON.parse(File.read(ARGV[0]))' "$DEST/manifest.json" \
+    || die "derived manifest.json is not valid JSON"
+  echo "  index: $DEST/manifest.json ($(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).length' "$DEST/manifest.json") entries)"
+fi
+
+cat > "$MIRROR/stage.env" <<EOF
+# written by tools/stage_runtime ($CHANNEL channel, release ${RELEASE_TAG:-n/a} / factory run ${FACTORY_RUN:-n/a})
+# (the windows-ucrt64 exe carries the .exe suffix and ships a sibling
+# .dll — also laid down under its install_as PE name when staged)
+TEBAKO_RUNTIME_MIRROR=file://$MIRROR
+RUNTIME_EXE=$DEST/tebako-runtime-$RT_TEBAKO-$RT_V-\$HOST_ID
+RUNTIME_IMAGE=$DEST/tebako-runtime-$RT_TEBAKO-$RT_V-\$HOST_ID.tfs
+EOF
+
+step "staged: python $RT_V runtime (tebako $RT_TEBAKO), $CHANNEL channel"
+echo "mirror:  $MIRROR"
+echo "use:     export TEBAKO_RUNTIME_MIRROR=file://$MIRROR"
+echo "         config.yaml runtimes: {python: {version: \"$RT_V\", tebako: \"$RT_TEBAKO\"}}"

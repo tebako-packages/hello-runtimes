@@ -1,0 +1,41 @@
+schema_version: 1
+# Payload manifest for hello-python (spec 03 §2.2; filled by tools/build).
+identity:
+  schema_version: 1
+  kind: app
+  name: "hello-python"
+  version: "@@VERSION@@"
+  producer: {tool: feedstock-build, tool_version: "1"}
+  created: "@@CREATED@@"                      # pinned at release time
+  source:
+    commit: "@@FEEDSTOCK_SHA@@"
+    builder: "@@BUILDER@@"                    # "gha:run:<id>" on CI builds
+  digest:
+    tree_hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"  # placeholder until the CAS lands (spec 03)
+    blob_sha256: "@@BLOB_SHA256@@"
+  signing: {state: unsigned}
+  encryption: {state: none}
+  annotations: {sample: hello-runtimes, runtime: python}
+provides:
+  entrypoints:
+    - name: hello-python
+      path: /app/hello.py
+      args_default: []
+      runtime_requirement:
+        # Pure-language payload (stdlib only): a version RANGE (see
+        # hello-ruby's note). The legs ride the 3.14 line.
+        engine: python
+        constraint: ">= 3.13, < 4.0"
+  platforms: []                   # filled by tools/build from the leg's
+                                  # triplet (the template stays parseable)
+  capabilities: {exec: true, read: true}
+requires:
+  - kind: language
+    engine: python
+    constraint: ">= 3.13, < 4.0"
+checks:
+  run:
+    entry: /app/hello.py
+    argv: []
+    expect: {exit: 0}
+    timeout: 60

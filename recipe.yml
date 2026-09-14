@@ -1,0 +1,75 @@
+# Suite recipe for hello-runtimes — one hello-world app payload per
+# tebako runtime. This repo is deliberately a SUITE: one repo, one
+# release, N payloads (the per-runtime samples share a version line).
+# The one-repo-per-package convention bends here by design — this is the
+# reference the docs walk through.
+name: hello-runtimes
+version: "1.0.0"               # every payload in the suite versions together
+
+# The pinned tebako toolchain (tfs mkimage + tebako check/publish),
+# digest-pinned per platform against the release's own SHA256SUMS (the
+# trust-anchor pattern: a drifted byte is a pin mismatch, named).
+tools:
+  repo: "tamatebako/tebako"
+  release: "v2.8.2"
+  sha256:
+    linux-gnu-x86_64:
+      tebako: "90eece5ee2f330e776a194ba3e254e1cb0147ae50b1f5cdbeea9828ce3e8bcd0"
+      tfs:    "4d6dc1d2b74d1f688644ee8af61c90ca13560f0b5e9463023a5fa075f80c877c"
+    linux-gnu-arm64:
+      tebako: "fdf838597649ed066ca7c48ca36f97e104030a8cb78823b0901f8bae236b66e7"
+      tfs:    "8823a46723f3e123264ffdee755276a0c4271fcef036c287224dcd5820dd7156"
+    macos-x86_64:
+      tebako: "11843b58587a0566dfa66904bd06f557a11ee18c116845a6d426482b7e976c7c"
+      tfs:    "43402ff74b9c8484410f23349f94d9703b26b6f22677abc44439bf3aa969bb64"
+    macos-arm64:
+      tebako: "83bd46fa921a0c59cfb56287fb317812b61e77237cd733546c0c833229190399"
+      tfs:    "99dff652b3d391e5164ba67575cc4c3b9fdf4b8ac04ccfba81978b75ca3cf9e0"
+    windows-ucrt64:
+      tebako: "d05692ad56a3552381ac3339ac53e15f9dd52eaaa97215500c7fdcdcb72eff56"
+      tfs:    "e96bc9b47bdd992af1c032d84894eb8a3dcd42e43f42f9cd52a7eee11fe5be4a"
+
+# The apps. Each names its runtime FACTORY + the exact runtime line(s)
+# the legs stage (release channel only — run-artifacts stay a factory
+# debug channel). hello-ruby stages BOTH published ruby lines: one
+# payload, a range edge, two runtimes — the version-choice story.
+apps:
+  hello-ruby:
+    engine: ruby
+    factory: tamatebako/tebako-runtime-ruby
+    runtimes:
+      - {version: "4.0.6",  tebako: "0.16.23", release: "v0.16.23"}
+      - {version: "3.3.12", tebako: "0.16.23", release: "v0.16.23"}
+    platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
+  hello-python:
+    engine: python
+    factory: tamatebako/tebako-runtime-python
+    runtimes:
+      - {version: "3.14.7", tebako: "0.2.0", release: "v0.2.0"}
+    # The windows-ucrt leg waits on the factory: the windows python
+    # runtime has no mount tier yet (its fs TU answers any mount with a
+    # named exit 69), so a windows payload cannot execute on its own
+    # platform until then.
+    platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos]
+  hello-java:
+    engine: java
+    factory: tamatebako/tebako-runtime-openjdk
+    runtimes:
+      - {version: "21.0.12", tebako: "2.7.0", release: "v2.7.0"}
+    platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
+
+# The leg topology (host runner per triplet). Every leg is runner-native
+# — this suite compiles nothing (the java app launches from source).
+ci:
+  hosts:
+    x86_64-linux-gnu: "ubuntu-22.04"
+    aarch64-linux-gnu: "ubuntu-22.04-arm"
+    x86_64-macos: "macos-15"
+    aarch64-macos: "macos-latest"
+    x86_64-windows-ucrt: "windows-2022"
+
+# Signing (spec 09 §9): on tag pushes the publish step signs every
+# payload image with the CI signing subkey of the tamatebako root (org
+# secret TEBAKO_CI_SIGNING_KEY); the registry pins the PRIMARY keyid.
+signing:
+  keyid: "efc3c250f7862a48"

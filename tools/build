@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# tools/build — assemble one sample app's payload tree and image it.
+# Nothing compiles and NOTHING runs at build time (the apps are
+# stdlib-only sources; the java app launches from source — java 11+
+# single-file source-code programs), so the builder needs no staged
+# runtime — boot_smoke stages the runtime line(s) and executes.
+#
+# Flow:
+#   1. locate the staged runtime pair in tools/stage_runtime's file://
+#      mirror (the legs stage it first)
+#   2. tree = the app's sources at /app + the rendered manifest at
+#      /__tpkg__/manifest.yaml (blob_sha256's fixed-point rule, spec 03
+#      §7: the embedded copy keeps the zero placeholder; the sibling
+#      manifest carries the real one for the release/registry tier)
+#   3. the declared entrypoint must exist in the tree (drift = named
+#      error, never a partial payload)
+#   4. tfs mkimage (default limnifs — the format the factories ship)
+#
+# Inputs (env, from tools/pins.rb --env; no literals here):
+#   APP        the sample app (apps/<app>/ + manifests/<app>.yaml)
+#   TRIPLET    the leg's triplet          HOST_ID  the factory host_id
+#   TFS_CLI    the pinned tfs binary (default: tfs on PATH)
+#
+# Produces: $OUT/<app>-<ver>-<host_id>.tfs + <app>-<ver>.manifest.yaml.
+set -euo pipefail
+
+FEEDSTOCK="$(cd "$(dirname "$0")/.." && pwd)"
+die() { echo "build: $*" >&2; exit 1; }
+step() { printf '\n== %s\n' "$*"; }
+
+APP="${APP:?build: APP unset (pins.rb --env)}"
+TRIPLET="${TRIPLET:?build: TRIPLET unset}"
+HOST_ID="${HOST_ID:?build: HOST_ID unset}"
+VERSION="${VERSION:-$(ruby -ryaml -e "puts YAML.load_file('$FEEDSTOCK/recipe.yml').fetch('version')")}"
+TFS_CLI="${TFS_CLI:-tfs}"
+WORK="$FEEDSTOCK/out/work-$APP-$TRIPLET"
+OUT="$FEEDSTOCK/out/$TRIPLET"
+mkdir -p "$WORK" "$OUT"
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+  else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
+
+# --------------------------------------------------------- payload tree
+step "assemble the $APP payload tree"
+PAYLOAD="$WORK/payload"
+rm -rf "$PAYLOAD"
+mkdir -p "$PAYLOAD/app" "$PAYLOAD/__tpkg__"
+cp "$FEEDSTOCK/apps/$APP/"* "$PAYLOAD/app/"
+
+MAN="$FEEDSTOCK/manifests/$APP.yaml"
+[ -f "$MAN" ] || die "no manifest template: $MAN"
+# Every declared entrypoint must exist in the tree (drift = named error).
+ruby -ryaml -e 'YAML.load_file(ARGV[0]).fetch("provides").fetch("entrypoints").each { |e| puts e.fetch("path") }' "$MAN" \
+  | while read -r p; do
+      [ -f "$PAYLOAD$p" ] || die "declared entrypoint $p not staged"
+    done
+echo "declared entrypoints staged and verified"
+
+# ------------------------------------------------------------- manifest
+step "fill the manifest (embedded at /__tpkg__/manifest.yaml — tier 1)"
+sed -e "s|@@VERSION@@|$VERSION|g" \
+    -e "s|@@CREATED@@|$(date -u +%Y-%m-%dT%H:%M:%SZ)|" \
+    -e "s|@@FEEDSTOCK_SHA@@|$(git -C "$FEEDSTOCK" rev-parse HEAD)|" \
+    -e "s|@@BUILDER@@|${GITHUB_RUN_ID:+gha:run:$GITHUB_RUN_ID}|" \
+    -e "s|^  platforms: \[.*\]|  platforms: [$TRIPLET]|" \
+    -e "s|@@BLOB_SHA256@@|0000000000000000000000000000000000000000000000000000000000000000|" \
+    "$MAN" > "$PAYLOAD/__tpkg__/manifest.yaml"
+grep -q '@@' "$PAYLOAD/__tpkg__/manifest.yaml" && die "unfilled @@…@@ placeholders remain in the embedded manifest"
+
+# ---------------------------------------------------------------- image
+step "tfs mkimage (the in-process writer — default limnifs, the factories' own format)"
+IMG="$OUT/$APP-$VERSION-$HOST_ID.tfs"
+rm -f "$IMG"
+"$TFS_CLI" mkimage "$PAYLOAD" --output "$IMG"
+sha="$(sha256_file "$IMG")"
+echo "image: $IMG"
+echo "sha256: $sha"
+
+# ------------------------------------------------------ sibling manifest
+step "fill the sibling manifest (release tier: real blob sha)"
+sed -e "s|blob_sha256: \"0*\"|blob_sha256: \"$sha\"|" \
+    "$PAYLOAD/__tpkg__/manifest.yaml" > "$OUT/$APP-$VERSION.manifest.yaml"
+echo "manifest: $OUT/$APP-$VERSION.manifest.yaml"

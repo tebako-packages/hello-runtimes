@@ -1,0 +1,41 @@
+schema_version: 1
+# Payload manifest for hello-java (spec 03 §2.2; filled by tools/build).
+identity:
+  schema_version: 1
+  kind: app
+  name: "hello-java"
+  version: "@@VERSION@@"
+  producer: {tool: feedstock-build, tool_version: "1"}
+  created: "@@CREATED@@"                      # pinned at release time
+  source:
+    commit: "@@FEEDSTOCK_SHA@@"
+    builder: "@@BUILDER@@"                    # "gha:run:<id>" on CI builds
+  digest:
+    tree_hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"  # placeholder until the CAS lands (spec 03)
+    blob_sha256: "@@BLOB_SHA256@@"
+  signing: {state: unsigned}
+  encryption: {state: none}
+  annotations: {sample: hello-runtimes, runtime: java}
+provides:
+  entrypoints:
+    - name: hello-java
+      # Single-file source-code launch (java 11+): the entry IS the
+      # source file; the runtime runs `java /app/Hello.java <args>`.
+      path: /app/Hello.java
+      args_default: []
+      runtime_requirement:
+        engine: java
+        constraint: ">= 21"
+  platforms: []                   # filled by tools/build from the leg's
+                                  # triplet (the template stays parseable)
+  capabilities: {exec: true, read: true}
+requires:
+  - kind: language
+    engine: java
+    constraint: ">= 21"
+checks:
+  run:
+    entry: /app/Hello.java
+    argv: []
+    expect: {exit: 0}
+    timeout: 120

@@ -1,0 +1,47 @@
+schema_version: 1
+# Payload manifest for hello-ruby (spec 03 §2.2; filled by tools/build).
+identity:
+  schema_version: 1
+  kind: app
+  name: "hello-ruby"
+  version: "@@VERSION@@"
+  producer: {tool: feedstock-build, tool_version: "1"}
+  created: "@@CREATED@@"                      # pinned at release time
+  source:
+    commit: "@@FEEDSTOCK_SHA@@"
+    builder: "@@BUILDER@@"                    # "gha:run:<id>" on CI builds
+  digest:
+    tree_hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"  # placeholder until the CAS lands (spec 03)
+    blob_sha256: "@@BLOB_SHA256@@"
+  signing: {state: unsigned}
+  encryption: {state: none}
+  annotations: {sample: hello-runtimes, runtime: ruby}
+provides:
+  entrypoints:
+    - name: hello-ruby
+      path: /app/hello.rb
+      args_default: []
+      runtime_requirement:
+        # Pure-language payload (stdlib only): a version RANGE — spec 05
+        # §5's abi line applies only to native extensions, and there are
+        # none here. One payload rides every compatible ruby line (the
+        # legs prove 3.3 and 4.0 alike).
+        engine: ruby
+        constraint: ">= 3.3, < 5.0"
+  platforms: []                   # filled by tools/build from the leg's
+                                  # triplet (the template stays parseable)
+  capabilities: {exec: true, read: true}
+requires:
+  # The provider's kind: language edge (spec 03 §8) — the press
+  # cross-check mirrors the consumer lock's nested runtime row against
+  # this edge.
+  - kind: language
+    engine: ruby
+    constraint: ">= 3.3, < 5.0"
+# spec 26 payload checks — the payload carries its own smoke test.
+checks:
+  run:
+    entry: /app/hello.rb
+    argv: []
+    expect: {exit: 0}
+    timeout: 60

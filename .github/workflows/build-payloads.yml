@@ -1,0 +1,214 @@
+name: build-payloads
+
+# The hello-runtimes suite pipeline: per (app × platform) legs build the
+# payload and smoke it against EVERY runtime line the recipe names for
+# the app (the payload bytes are runtime-independent — pure-language
+# law), then a tag-dispatched publish signs and ships the set.
+#
+# Leg grammar: every leg is runner-native (the suite compiles nothing).
+# GH_TOKEN needs contents:read on the runtime factories (public).
+#
+# Release: NEVER automatic — owner dispatch with publish: true on a tag.
+
+on:
+  push:
+    branches: [main]
+    tags: ["*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish this run''s payloads to the tag release + registry PR (owner-only act; requires running on a tag ref)'
+        type: boolean
+        default: false
+
+# One run per branch/PR-head at a time; a new run cancels the stale one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.pins.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v6.0.0
+      - id: pins
+        run: echo "matrix=$(ruby tools/pins.rb --matrix)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    name: ${{ matrix.app }} (${{ matrix.triplet }})
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash        # Git Bash on the windows legs; inert on POSIX
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v6.0.0
+
+      - name: Leg env (recipe.yml is the SSOT)
+        run: ruby tools/pins.rb --env "${{ matrix.app }}" "${{ matrix.triplet }}" >> "$GITHUB_ENV"
+
+      - name: Fetch the pinned tebako tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p .tools && cd .tools
+          base="https://github.com/tamatebako/tebako/releases/download/$TEBAKO_RELEASE"
+          # -fsSL + retries: a transient flake fails loudly, never a
+          # silent error page the sha pin then rejects.
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TEBAKO_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TFS_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/SHA256SUMS"
+          echo "$TEBAKO_SHA256  $TEBAKO_ASSET" > SHA256PINS
+          echo "$TFS_SHA256  $TFS_ASSET" >> SHA256PINS
+          if command -v sha256sum >/dev/null 2>&1; then sha256sum -c SHA256PINS; else shasum -a 256 -c SHA256PINS; fi
+          # The pinned digests must also agree with the release's own
+          # SHA256SUMS (a release-side swap is a mismatch, named).
+          for asset in "$TEBAKO_ASSET" "$TFS_ASSET"; do
+            want="$(grep "  $asset\$" SHA256PINS | cut -d' ' -f1)"
+            got="$(grep "  $asset\$" SHA256SUMS | cut -d' ' -f1 || true)"
+            [ "$got" = "$want" ] || { echo "::error::pin mismatch for $asset: recipe.yml=$want release=${got:-ABSENT}"; exit 1; }
+          done
+          chmod +x "$TEBAKO_ASSET" "$TFS_ASSET"
+          # Normalize to .tools/tebako + .tools/tfs (the .exe suffix kept
+          # on windows so the shim resolution is literal).
+          sfx=""; case "$TEBAKO_ASSET" in *.exe) sfx=.exe ;; esac
+          mv "$TEBAKO_ASSET" "tebako$sfx"
+          mv "$TFS_ASSET" "tfs$sfx"
+
+      - name: Build the payload
+        run: TFS_CLI="$PWD/.tools/tfs" tools/build
+
+      - name: Stage the runtime line(s) and boot-smoke each
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          while read -r rt_v rt_tb rt_rel; do
+            echo "== $APP on $rt_v (tebako $rt_tb, $rt_rel)"
+            RT_V="$rt_v" RT_TEBAKO="$rt_tb" RELEASE_TAG="$rt_rel" \
+              HOST_IDS="$HOST_ID" MIRROR="$PWD/out/mirror-$rt_v" tools/stage_runtime
+            exe="$PWD/out/mirror-$rt_v/v$rt_tb/tebako-runtime-$rt_tb-$rt_v-$HOST_ID"
+            [ -x "$exe" ] || exe="$exe.exe"
+            # Native windows tools cannot read Git Bash's POSIX path
+            # spellings — go windows-form where cygpath exists (inert
+            # on POSIX).
+            if command -v cygpath >/dev/null 2>&1; then
+              exe="$(cygpath -m "$exe")"
+            fi
+            RUNTIME="$exe" RUNTIME_IMAGE="$exe.tfs" \
+              TFS="$PWD/.tools/tfs" TEBAKO="$PWD/.tools/tebako" \
+              tools/boot_smoke "out/$TRIPLET/$APP-$PKG_VERSION-$HOST_ID.tfs"
+          done < <(ruby tools/pins.rb --runtimes "$APP")
+
+      - name: Stage the artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p "dist/$TRIPLET"
+          cp "out/$TRIPLET/$APP-$PKG_VERSION-$HOST_ID.tfs" "dist/$TRIPLET/"
+          cp "out/$TRIPLET/$APP-$PKG_VERSION.manifest.yaml" "dist/$TRIPLET/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: payload-${{ matrix.app }}-${{ matrix.triplet }}
+          path: dist/
+          retention-days: 1
+
+  publish:
+    if: ${{ always() && !cancelled() && inputs.publish && needs.build.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
+    needs: [plan, build]
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v6.0.0
+
+      - name: Pins
+        run: |
+          ruby tools/pins.rb --env hello-ruby aarch64-macos >> "$GITHUB_ENV"
+
+      - name: Fetch the pinned tebako tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p .tools && cd .tools
+          base="https://github.com/tamatebako/tebako/releases/download/$TEBAKO_RELEASE"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TEBAKO_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/SHA256SUMS"
+          echo "$TEBAKO_SHA256  $TEBAKO_ASSET" | shasum -a 256 -c -
+          chmod +x "$TEBAKO_ASSET" && mv "$TEBAKO_ASSET" tebako
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: payload-*
+          path: out/
+
+      - name: Stage the publish-verify mirror (each engine's first line)
+        run: |
+          set -euo pipefail
+          for app in hello-ruby hello-python hello-java; do
+            read -r rt_v rt_tb rt_rel < <(ruby tools/pins.rb --runtimes "$app" | head -1)
+            RT_V="$rt_v" RT_TEBAKO="$rt_tb" RELEASE_TAG="$rt_rel" \
+              FACTORY_REPO="$(ruby -ryaml -e "puts YAML.load_file('recipe.yml').dig('apps', '$app', 'factory')")" \
+              HOST_IDS=macos-arm64 MIRROR="$PWD/out/runtime-mirror" tools/stage_runtime
+          done
+          mkdir -p "$HOME/.tebako"
+          {
+            echo "runtimes:"
+            for app in hello-ruby hello-python hello-java; do
+              engine="$(ruby -ryaml -e "puts YAML.load_file('recipe.yml').dig('apps', '$app', 'engine')")"
+              read -r rt_v rt_tb rt_rel < <(ruby tools/pins.rb --runtimes "$app" | head -1)
+              printf '  %s: {version: "%s", tebako: "%s"}\n' "$engine" "$rt_v" "$rt_tb"
+            done
+          } >> "$HOME/.tebako/config.yaml"
+
+      - name: Publish payloads + registry
+        env:
+          TEBAKO_RUNTIME_MIRROR: file://${{ github.workspace }}/out/runtime-mirror
+          TEBAKO_SIGNING_KEY: ${{ secrets.TEBAKO_CI_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          TEBAKO_CLI="$PWD/.tools/tebako"
+          SIGN_ARGS=()
+          : "${TEBAKO_SIGNING_KEY:?publish: recipe declares signing but TEBAKO_SIGNING_KEY is empty — a signing feedstock never publishes unsigned}"
+          mkdir -p "$HOME/.tebako/keys"
+          printf '%s\n' "$TEBAKO_SIGNING_KEY" > "$HOME/.tebako/keys/ci-signing.key"
+          chmod 600 "$HOME/.tebako/keys/ci-signing.key"
+          SIGN_ARGS=(--sign="$SIGNING_KEYID")
+          for app in hello-ruby hello-python hello-java; do
+            # shellcheck disable=SC2046  # word-split IS the point: --payload triples
+            "$TEBAKO_CLI" publish "${SIGN_ARGS[@]}" --name "$app" \
+              --release "tfs:github:tebako-packages/hello-runtimes:${{ github.ref_name }}" \
+              $(ruby tools/pins.rb --payload-args | grep "^--payload $app=") \
+              --registry-out "$PWD/tpkg-registry.yaml"
+          done
+
+      - name: Registry PR (main is protected)
+        run: |
+          set -euo pipefail
+          git config user.name "tebako-ci" && git config user.email "tebako@ribose.com"
+          if git diff --quiet tpkg-registry.yaml; then
+            echo "registry unchanged (or the entries already landed on main)"; exit 0
+          fi
+          branch="publish/${{ github.ref_name }}-registry"
+          git checkout -b "$branch"
+          git add tpkg-registry.yaml
+          git commit -m "publish ${{ github.ref_name }}: registry entries (the suite)"
+          git push origin "$branch"
+          if ! gh pr view "$branch" >/dev/null 2>&1; then
+            gh pr create --base main --head "$branch" \
+              --title "publish ${{ github.ref_name }}: registry entries" \
+              --body "Automated registry entries for ${{ github.ref_name }} (the build-payloads publish job; main is protected, so the registry lands by PR)."
+          fi
+          gh pr merge --auto --squash "$branch" || gh pr merge --squash "$branch"
