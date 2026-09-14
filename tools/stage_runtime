@@ -120,8 +120,11 @@ case "$CHANNEL" in
     mkdir -p "$REL_DL"
     # Enumerate the release's assets once (gh's built-in --jq — no jq
     # binary needed), then select each leg's shards on the pin's exact
-    # version + variant suffixes.
-    listing="$REL_DL/.assets.listing"
+    # version + variant suffixes. The listing cache keys on the
+    # factory+tag — a shared REL_DL (the publish job stages three
+    # factories through one dir) must never answer repo B's listing from
+    # repo A's cache.
+    listing="$REL_DL/.assets.$(printf '%s' "$FACTORY_REPO" | tr '/' '-')-$RELEASE_TAG.listing"
     if [ ! -s "$listing" ]; then
       gh release view "$RELEASE_TAG" --repo "$FACTORY_REPO" --json assets --jq '.assets[].name' > "$listing" \
         || die "cannot enumerate $FACTORY_REPO release $RELEASE_TAG"
