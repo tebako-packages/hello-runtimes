@@ -267,6 +267,14 @@ if [ "$CHANNEL" = "release" ]; then
     [ -n "$abi" ] && printf '%s\n' "$abi" > "$DEST/$stem.abi"
     chmod 755 "$DEST/$exe_asset" 2>/dev/null || true
     chmod 444 "$DEST/$img_asset"
+    # The staged pair's LITERAL names flow to the caller (the shard owns
+    # the asset spellings — factories differ: openjdk's windows exe keeps
+    # its .exe in the asset name, ruby's drops it; nobody downstream may
+    # re-compose a runtime's exe/image name).
+    cat > "$DEST/$stem.stage.env" <<EOF
+RUNTIME_EXE=$DEST/$exe_asset
+RUNTIME_IMAGE=$DEST/$img_asset
+EOF
     echo "  $stem: $(sha256_file "$DEST/$exe_asset")"
   done < "$SHARDS"
   # The trimmed monolith, derived consumer-side: each shard IS its
@@ -358,11 +366,13 @@ fi
 
 cat > "$MIRROR/stage.env" <<EOF
 # written by tools/stage_runtime ($CHANNEL channel, release ${RELEASE_TAG:-n/a} / factory run ${FACTORY_RUN:-n/a})
-# (the windows-ucrt64 exe carries the .exe suffix and ships a sibling
-# .dll — also laid down under its install_as PE name when staged)
+# The exe/image LITERAL names live in per-stem files beside the packages:
+#   $DEST/<stem>.stage.env   (RUNTIME_EXE=… / RUNTIME_IMAGE=…)
+# — the shard owns the asset spellings (factories differ on the windows
+# .exe suffix); compose nothing.
+# (the windows-ucrt64 ruby exe ships a sibling .dll — also laid down
+# under its install_as PE name when staged)
 TEBAKO_RUNTIME_MIRROR=file://$MIRROR
-RUNTIME_EXE=$DEST/tebako-runtime-$RT_TEBAKO-$RT_V-\$HOST_ID
-RUNTIME_IMAGE=$DEST/tebako-runtime-$RT_TEBAKO-$RT_V-\$HOST_ID.tfs
 EOF
 
 step "staged: runtime $RT_V (tebako $RT_TEBAKO), $CHANNEL channel"

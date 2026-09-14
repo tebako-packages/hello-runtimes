@@ -106,15 +106,21 @@ jobs:
             echo "== $APP on $rt_v (tebako $rt_tb, $rt_rel)"
             RT_V="$rt_v" RT_TEBAKO="$rt_tb" RELEASE_TAG="$rt_rel" \
               HOST_IDS="$HOST_ID" MIRROR="$PWD/out/mirror-$rt_v" tools/stage_runtime
-            exe="$PWD/out/mirror-$rt_v/v$rt_tb/tebako-runtime-$rt_tb-$rt_v-$HOST_ID"
-            [ -x "$exe" ] || exe="$exe.exe"
+            # The shard owns the exe/image asset spellings (factories
+            # differ on the windows .exe suffix) — the staged pair's
+            # literal names FLOW from the per-stem file; compose nothing.
+            stem="tebako-runtime-$rt_tb-$rt_v-$HOST_ID"
+            . "$PWD/out/mirror-$rt_v/v$rt_tb/$stem.stage.env"
+            exe="$RUNTIME_EXE"
+            img="$RUNTIME_IMAGE"
             # Native windows tools cannot read Git Bash's POSIX path
             # spellings — go windows-form where cygpath exists (inert
             # on POSIX).
             if command -v cygpath >/dev/null 2>&1; then
               exe="$(cygpath -m "$exe")"
+              img="$(cygpath -m "$img")"
             fi
-            RUNTIME="$exe" RUNTIME_IMAGE="$exe.tfs" \
+            RUNTIME="$exe" RUNTIME_IMAGE="$img" \
               TFS="$PWD/.tools/tfs" TEBAKO="$PWD/.tools/tebako" \
               tools/boot_smoke "out/$TRIPLET/$APP-$PKG_VERSION-$HOST_ID.tfs"
           done < <(ruby tools/pins.rb --runtimes "$APP")
