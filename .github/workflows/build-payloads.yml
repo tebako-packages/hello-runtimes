@@ -213,14 +213,44 @@ jobs:
           printf 'runtimes:\n  ruby: {version: "%s", tebako: "%s"}\n' "$rt_v" "$rt_tb" >> "$TEBAKO_HOME/config.yaml"
 
       - name: Install base + slice into the scratch store
-        # Local-image installs (the dispatch behavior under test is
-        # store-local); the version chain gets an explicit pin since no
-        # registry is registered in this leg.
+        # Bare .tfs images install only through a registry (spec 07 §3 —
+        # a path install is for stitched packages). This leg proves the
+        # STORE behavior, not the release plumbing (the publish job's own
+        # verify covers that): publish both payloads to a file:// mirror
+        # (zero network — publish's built-in verify rides the mirror),
+        # then re-point the generated registry at the mirror in the
+        # universal form (per-triplet rows require a service ref, spec 04
+        # §2) and install by name — registry installs register the shims.
         run: |
           set -euo pipefail
           TEBAKO_CLI="$PWD/.tools/tebako"
-          "$TEBAKO_CLI" install "out/aarch64-macos/hello-ruby-$PKG_VERSION-$HOST_ID.tfs" --shims
-          "$TEBAKO_CLI" install "out/aarch64-macos/hello-flavor-acme-$PKG_VERSION-$HOST_ID.tfs"
+          mirror="$PWD/out/publish-mirror"
+          tag="slice-acceptance"
+          for app in hello-ruby hello-flavor-acme; do
+            "$TEBAKO_CLI" publish --name "$app" \
+              --release "tfs:github:tebako-packages/hello-runtimes:$tag" \
+              --payload "aarch64-macos=$PWD/out/aarch64-macos/$app-$PKG_VERSION-$HOST_ID.tfs" \
+              --registry-out "$PWD/tpkg-registry.yaml" \
+              --upload-mirror "$mirror"
+          done
+          ruby -ryaml -e '
+            mirror, tag = ARGV.fetch(0), ARGV.fetch(1)
+            reg = YAML.load_file("tpkg-registry.yaml")
+            reg["payloads"].each do |p|
+              p["versions"].each do |v|
+                _trip, row = v["platforms"].first
+                v["platforms"] = "universal"
+                v["release"]["ref"] = "file://#{mirror}/#{tag}/#{row["artifact"]}?sha256=#{row["sha256"]}"
+              end
+            end
+            File.write("tpkg-registry-file.yaml", reg.to_yaml)
+          ' "$mirror" "$tag"
+          "$TEBAKO_CLI" add-registry "file://$PWD/tpkg-registry-file.yaml"
+          "$TEBAKO_CLI" install "hello-ruby@$PKG_VERSION"
+          "$TEBAKO_CLI" install "hello-flavor-acme@$PKG_VERSION"
+          # The version chain's explicit pin (no registry default read at
+          # dispatch in this leg — the chain links env/project/config all
+          # resolve before the registry link).
           "$TEBAKO_CLI" shim use hello-ruby "$PKG_VERSION"
 
       - name: The slice attaches (auto-discovery)
