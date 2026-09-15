@@ -225,27 +225,31 @@ jobs:
           set -euo pipefail
           TEBAKO_CLI="$PWD/.tools/tebako"
           mirror="$PWD/out/publish-mirror"
+          reg="$PWD/out/acceptance-registry.yaml"
           tag="slice-acceptance"
+          # The registry lands under out/ (untracked): this leg never
+          # touches the repo's real tpkg-registry.yaml (the publish job
+          # owns that file at release time).
           for app in hello-ruby hello-flavor-acme; do
             "$TEBAKO_CLI" publish --name "$app" \
               --release "tfs:github:tebako-packages/hello-runtimes:$tag" \
               --payload "aarch64-macos=$PWD/out/aarch64-macos/$app-$PKG_VERSION-$HOST_ID.tfs" \
-              --registry-out "$PWD/tpkg-registry.yaml" \
+              --registry-out "$reg" \
               --upload-mirror "$mirror"
           done
           ruby -ryaml -e '
-            mirror, tag = ARGV.fetch(0), ARGV.fetch(1)
-            reg = YAML.load_file("tpkg-registry.yaml")
-            reg["payloads"].each do |p|
+            mirror, tag, reg = ARGV.fetch(0), ARGV.fetch(1), ARGV.fetch(2)
+            doc = YAML.load_file(reg)
+            doc["payloads"].each do |p|
               p["versions"].each do |v|
                 _trip, row = v["platforms"].first
                 v["platforms"] = "universal"
                 v["release"]["ref"] = "file://#{mirror}/#{tag}/#{row["artifact"]}?sha256=#{row["sha256"]}"
               end
             end
-            File.write("tpkg-registry-file.yaml", reg.to_yaml)
-          ' "$mirror" "$tag"
-          "$TEBAKO_CLI" add-registry "file://$PWD/tpkg-registry-file.yaml"
+            File.write(reg.sub(/\.yaml$/, "-file.yaml"), doc.to_yaml)
+          ' "$mirror" "$tag" "$reg"
+          "$TEBAKO_CLI" add-registry "file://${reg%.yaml}-file.yaml"
           "$TEBAKO_CLI" install "hello-ruby@$PKG_VERSION"
           "$TEBAKO_CLI" install "hello-flavor-acme@$PKG_VERSION"
           # The version chain's explicit pin (no registry default read at
