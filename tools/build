@@ -71,6 +71,13 @@ if [ -d "$FEEDSTOCK/apps/$APP/src" ]; then
   "$JH/bin/javac" --release 21 -d "$WORK/classes" "$FEEDSTOCK/apps/$APP/src/Hello.java"
   # cfe: jar with the Main-Class manifest entry (the -jar entry needs it).
   "$JH/bin/jar" cfe "$PAYLOAD/app/hello.jar" Hello -C "$WORK/classes" .
+elif [ -d "$FEEDSTOCK/apps/$APP/gemhome" ]; then
+  # Extension slices (spec 03 §2.8): an app dir carrying gemhome/ is a
+  # toolkit slice whose image root IS the mini GEM_HOME (gems/ +
+  # specifications/) — the /app staging does not apply.
+  step "stage the gem-home slice tree (the image root is the GEM_HOME)"
+  rm -rf "$PAYLOAD/app"
+  cp -R "$FEEDSTOCK/apps/$APP/gemhome/"* "$PAYLOAD/"
 else
   cp "$FEEDSTOCK/apps/$APP/"* "$PAYLOAD/app/"
 fi
@@ -78,9 +85,11 @@ fi
 MAN="$FEEDSTOCK/manifests/$APP.yaml"
 [ -f "$MAN" ] || die "no manifest template: $MAN"
 # Every declared entrypoint must exist in the tree (drift = named error).
+# Content-only slices declare none (capabilities.exec false) — the check
+# vacuously passes.
 # ($stdout.binmode: NATIVE windows ruby terminates text-mode lines with
 # CRLF and `read` keeps the \r — the path would never stat true.)
-ruby -ryaml -e '$stdout.binmode; YAML.load_file(ARGV[0]).fetch("provides").fetch("entrypoints").each { |e| puts e.fetch("path") }' "$MAN" \
+ruby -ryaml -e '$stdout.binmode; YAML.load_file(ARGV[0]).fetch("provides").fetch("entrypoints", []).each { |e| puts e.fetch("path") }' "$MAN" \
   | while read -r p; do
       [ -f "$PAYLOAD$p" ] || die "declared entrypoint $p not staged"
     done
@@ -98,10 +107,11 @@ sed -e "s|@@VERSION@@|$VERSION|g" \
 grep -q '@@' "$PAYLOAD/__tpkg__/manifest.yaml" && die "unfilled @@…@@ placeholders remain in the embedded manifest"
 
 # ---------------------------------------------------------------- image
-step "tfs mkimage (the in-process writer — default limnifs, the factories' own format)"
+step "tfs mkimage (the in-process writer — limnifs, the factories' own format)"
 IMG="$OUT/$APP-$VERSION-$HOST_ID.tfs"
 rm -f "$IMG"
-"$TFS_CLI" mkimage "$PAYLOAD" --output "$IMG"
+# --format is explicit (never the default): newer tfs requires it.
+"$TFS_CLI" mkimage --format limnifs "$PAYLOAD" --output "$IMG"
 sha="$(sha256_file "$IMG")"
 echo "image: $IMG"
 echo "sha256: $sha"

@@ -65,6 +65,19 @@ apps:
     # macos-arm64, windows-ucrt64) — aarch64-linux and x86_64-macos legs
     # join when the factory ships those packages.
     platforms: [x86_64-linux-gnu, aarch64-macos, x86_64-windows-ucrt]
+  hello-flavor-acme:
+    # The reference EXTENSION slice (spec 03 §2.8): toolkit-kind content
+    # that augments hello-ruby (the reverse edge is in its manifest, not
+    # here). A slice stages no runtime legs of its own — the language
+    # edge is satisfied by the BASE's resolved runtime at dispatch — so
+    # `runtimes` is empty and the leg loop smokes nothing; the slice's
+    # proof is the dispatch-time acceptance (the base's output gains the
+    # flavor's line), which joins with the toolchain release carrying
+    # the slice scan.
+    engine: ruby
+    factory: tamatebako/tebako-runtime-ruby
+    runtimes: []
+    platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
 
 # The leg topology (host runner per triplet). Every leg is runner-native;
 # only the java leg compiles — the app's own source, with the runner's

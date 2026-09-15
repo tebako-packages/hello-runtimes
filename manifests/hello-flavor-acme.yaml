@@ -1,0 +1,47 @@
+schema_version: 1
+# Payload manifest for hello-flavor-acme (spec 03 §2.2 + §2.8; filled by
+# tools/build). The reference EXTENSION slice: a toolkit-kind payload that
+# augments hello-ruby — in-process content only, no runtime of its own,
+# never the dispatched root payload.
+identity:
+  schema_version: 1
+  kind: toolkit
+  name: "hello-flavor-acme"
+  version: "@@VERSION@@"
+  producer: {tool: feedstock-build, tool_version: "1"}
+  created: "@@CREATED@@"                      # pinned at release time
+  source:
+    commit: "@@FEEDSTOCK_SHA@@"
+    builder: "@@BUILDER@@"                    # "gha:run:<id>" on CI builds
+  digest:
+    tree_hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"  # placeholder until the CAS lands (spec 03)
+    blob_sha256: "@@BLOB_SHA256@@"
+  signing: {state: unsigned}
+  encryption: {state: none}
+  annotations: {sample: hello-runtimes, extends: hello-ruby}
+provides:
+  # The image root IS the mini GEM_HOME (gems/ + specifications/) — the
+  # dispatcher mounts it at <the base's point>/<slice name>
+  # (/flavors.d/hello-flavor-acme) and the base's entrypoint puts it on
+  # GEM_PATH and requires the slice-named gem.
+  libraries:
+    - {name: hello-flavor-acme, path: /gems/hello-flavor-acme-0.1.0/lib}
+  platforms: []                   # filled by tools/build from the leg's
+                                  # triplet (the template stays parseable)
+  # Content-only (spec 03 §2.8's scope lock): slices carry no executables —
+  # an extension with commands rides the forward requires/expose edge.
+  capabilities: {exec: false, read: true}
+requires:
+  # No runtime of the slice's own: the language edge is satisfied by the
+  # BASE's resolved runtime (checked at dispatch — engine + constraint;
+  # pure-ruby content, so a range with no abi line).
+  - kind: language
+    engine: ruby
+    constraint: ">= 3.3, < 5.0"
+augments:
+  # The reverse edge (spec 03 §2.8): this slice extends hello-ruby at its
+  # declared `flavors` extension point. EXACT pin — the binding rule: the
+  # suite versions together, so one slice release per base release.
+  - payload: hello-ruby
+    constraint: "= @@VERSION@@"
+    extension_point: flavors
