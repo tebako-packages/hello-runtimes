@@ -149,6 +149,10 @@ jobs:
     # model — the press must round-trip `augments` into the embedded
     # manifest AND the shim must carry the store scan; the recipe pin
     # gates that, so this job only goes green on a slice-capable release.
+    # The pinned RUNTIME's engine must also carry the mount-boundary
+    # synthesis (spec 17 §1 — the drop-in enumerates the point dir and
+    # Gem.paths= realpaths the mounted homes), so the leg goes green only
+    # on a runtime built from a slice-capable tools release.
     needs: [plan, build]
     runs-on: macos-latest
     defaults:
