@@ -31,6 +31,16 @@ provides:
   platforms: []                   # filled by tools/build from the leg's
                                   # triplet (the template stays parseable)
   capabilities: {exec: true, read: true}
+  # Extension slices (spec 03 §2.8): the sample base declares WHERE slice
+  # payloads land — a mini GEM_HOME per slice at /flavors.d/<slice-name>;
+  # the app's drop-in (apps/hello-ruby/hello.rb) puts mounted homes on
+  # GEM_PATH and requires the slice-named gem.
+  extension_points:
+    - {name: flavors, mount: /flavors.d, layout: gem-home}
+  # The gem inventory a gem-home host MUST carry (spec 03 §2.8): honestly
+  # empty — this base is stdlib-only, so a slice press's dedup subtraction
+  # against it keeps the slice's whole closure.
+  gems: []
 requires:
   # The provider's kind: language edge (spec 03 §8) — the press
   # cross-check mirrors the consumer lock's nested runtime row against

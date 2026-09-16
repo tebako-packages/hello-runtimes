@@ -11,28 +11,28 @@ version: "1.0.1"               # every payload in the suite versions together
 # trust-anchor pattern: a drifted byte is a pin mismatch, named).
 tools:
   repo: "tamatebako/tebako"
-  release: "v2.8.2"
+  release: "v2.8.6"
   sha256:
     linux-gnu-x86_64:
-      tebako: "90eece5ee2f330e776a194ba3e254e1cb0147ae50b1f5cdbeea9828ce3e8bcd0"
-      tfs:    "4d6dc1d2b74d1f688644ee8af61c90ca13560f0b5e9463023a5fa075f80c877c"
-      shim:   "3a643a94b18b2427ea3e55602a82709e34acf07e736989045cf91b2c16e5fd27"
+      tebako: "f202f1853f469a23760b07f346a7b727d7c2c903548f25a67fa70ebdae140fb8"
+      tfs:    "8bc65286cf052b17aa6a95bbd277a06f3ab09c3df8b7d919ae9609085b9ed13e"
+      shim:   "9bacf97be8d80a847d3cb80a759327c0ac57b4de3cf7a4bad2626778c671cb3d"
     linux-gnu-arm64:
-      tebako: "fdf838597649ed066ca7c48ca36f97e104030a8cb78823b0901f8bae236b66e7"
-      tfs:    "8823a46723f3e123264ffdee755276a0c4271fcef036c287224dcd5820dd7156"
-      shim:   "f0d2bcfdf675514df8faa28d4ca930cf131a120809b533a4d0b4e86597634dd6"
+      tebako: "68ba2fcd18d0401719011b08ccff6bc2cb50b1113c542c52062e36d065f849b0"
+      tfs:    "7ad59af2a65a16752cd6bb7318d4d6d0cae935e7349d901173bd327f979f90aa"
+      shim:   "b68a911e412b315a79a189f628f26096c1c43d4a9523e3749fe4afa6dc2081d7"
     macos-x86_64:
-      tebako: "11843b58587a0566dfa66904bd06f557a11ee18c116845a6d426482b7e976c7c"
-      tfs:    "43402ff74b9c8484410f23349f94d9703b26b6f22677abc44439bf3aa969bb64"
-      shim:   "0112a75c84e8ea325cb6bf8cb915ad55301bdef12c344e969cb5ae2fe226524a"
+      tebako: "17e46a39eb05085276d92110932304e36034a23ac18b9b49907dc79779e8f546"
+      tfs:    "836386fb7bf5132d870eed1263ff894c6cf7f3d6b05539a82c9aaff2fda8da57"
+      shim:   "2b13797aefe90b26d51ac2463acdf63a924e3fa71579567fff9e8bf5ede0db52"
     macos-arm64:
-      tebako: "83bd46fa921a0c59cfb56287fb317812b61e77237cd733546c0c833229190399"
-      tfs:    "99dff652b3d391e5164ba67575cc4c3b9fdf4b8ac04ccfba81978b75ca3cf9e0"
-      shim:   "252bc533c4b724dd4a80eb1e1b804b20a941b62d6545d3eaa4cbe5a96d52adc8"
+      tebako: "ddf1f90941dc7357b13615f13c9671600663f047b284f9f0969114ce42288381"
+      tfs:    "61aa6baf640243cb6692c0470cb82da54e9c609cfd58fb410e7a31c6bbb41294"
+      shim:   "23d87399928fa534b421528e67b511723c758f0439f1ca3127b62e8248befd42"
     windows-ucrt64:
-      tebako: "d05692ad56a3552381ac3339ac53e15f9dd52eaaa97215500c7fdcdcb72eff56"
-      tfs:    "e96bc9b47bdd992af1c032d84894eb8a3dcd42e43f42f9cd52a7eee11fe5be4a"
-      shim:   "0d159564be9e6c9a81f18bc02327e3de1b7377dd03c2e93b552b189b8c90c666"
+      tebako: "a2721cd9a2f41eacfc93a6153c7c741d45c8d279bd7a0ea59aa7522a75511390"
+      tfs:    "375ef4328138225fde359830f564a606bb29e4ac0952c4843d04a937e64358a7"
+      shim:   "25a238e4f31d2e4865c93e67def08f225be06dd51b30a88bbe1e66664f86daea"
 
 # The apps. Each names its runtime FACTORY + the exact runtime line(s)
 # the legs stage (release channel only — run-artifacts stay a factory
@@ -43,8 +43,8 @@ apps:
     engine: ruby
     factory: tamatebako/tebako-runtime-ruby
     runtimes:
-      - {version: "4.0.6",  tebako: "0.16.23", release: "v0.16.23"}
-      - {version: "3.3.12", tebako: "0.16.23", release: "v0.16.23"}
+      - {version: "4.0.6",  tebako: "0.16.24", release: "v0.16.24"}
+      - {version: "3.3.12", tebako: "0.16.24", release: "v0.16.24"}
     platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
   hello-python:
     engine: python
@@ -65,6 +65,19 @@ apps:
     # macos-arm64, windows-ucrt64) — aarch64-linux and x86_64-macos legs
     # join when the factory ships those packages.
     platforms: [x86_64-linux-gnu, aarch64-macos, x86_64-windows-ucrt]
+  hello-flavor-acme:
+    # The reference EXTENSION slice (spec 03 §2.8): toolkit-kind content
+    # that augments hello-ruby (the reverse edge is in its manifest, not
+    # here). A slice stages no runtime legs of its own — the language
+    # edge is satisfied by the BASE's resolved runtime at dispatch — so
+    # `runtimes` is empty and the leg loop smokes nothing; the slice's
+    # proof is the dispatch-time acceptance (the base's output gains the
+    # flavor's line), which joins with the toolchain release carrying
+    # the slice scan.
+    engine: ruby
+    factory: tamatebako/tebako-runtime-ruby
+    runtimes: []
+    platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
 
 # The leg topology (host runner per triplet). Every leg is runner-native;
 # only the java leg compiles — the app's own source, with the runner's

@@ -138,6 +138,158 @@ jobs:
           path: dist/
           retention-days: 1
 
+  slice-acceptance:
+    # The extension-slice dispatch proof (spec 03 §2.8, spec 07 §2 step
+    # 3): hello-ruby declares the `flavors` extension point and
+    # hello-flavor-acme augments it. Both install into one scratch store;
+    # dispatching the base must then attach the slice (auto-discovery —
+    # the flavor's tag line joins the greeting and the attach journals),
+    # a killed store scan (auto_slices: false) must drop it, and an env
+    # pin must re-attach it even so. Requires tools carrying the slice
+    # model — the press must round-trip `augments` into the embedded
+    # manifest AND the shim must carry the store scan; the recipe pin
+    # gates that, so this job only goes green on a slice-capable release.
+    # The pinned RUNTIME's engine must also carry the mount-boundary
+    # synthesis (spec 17 §1 — the drop-in enumerates the point dir and
+    # Gem.paths= realpaths the mounted homes), so the leg goes green only
+    # on a runtime built from a slice-capable tools release.
+    needs: [plan, build]
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TEBAKO_HOME: ${{ github.workspace }}/.store
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v6.0.0
+
+      - name: Leg env (Tebakofile is the SSOT)
+        run: ruby tools/pins.rb --env hello-ruby aarch64-macos >> "$GITHUB_ENV"
+
+      - name: Fetch the pinned tebako tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p .tools && cd .tools
+          base="https://github.com/tamatebako/tebako/releases/download/$TEBAKO_RELEASE"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TEBAKO_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$SHIM_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/SHA256SUMS"
+          echo "$TEBAKO_SHA256  $TEBAKO_ASSET" | shasum -a 256 -c -
+          echo "$SHIM_SHA256  $SHIM_ASSET" | shasum -a 256 -c -
+          chmod +x "$TEBAKO_ASSET" "$SHIM_ASSET"
+          # The dispatcher is linked sibling-wise: tebako-shim must sit
+          # beside the CLI.
+          mv "$TEBAKO_ASSET" tebako
+          mv "$SHIM_ASSET" tebako-shim
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: payload-*-aarch64-macos
+          path: out/
+
+      - name: Restore the out/<triplet>/ layout
+        # Same merge as the publish job: each artifact carries its leg's
+        # dist/<triplet>/ contents nested one level deep.
+        run: |
+          set -euo pipefail
+          for d in out/payload-*/; do
+            for t in "$d"*/; do
+              triplet="$(basename "$t")"
+              mkdir -p "out/$triplet"
+              mv "$t"* "out/$triplet/"
+            done
+            rm -rf "$d"
+          done
+          ls -la out/aarch64-macos/
+
+      - name: Stage the runtime mirror (hello-ruby's first line)
+        # The dispatch-time runtime fetch resolves against the file://
+        # mirror (TEBAKO_RUNTIME_MIRROR on the dispatch steps) — zero
+        # live network at the assert steps; the config pin names the line.
+        run: |
+          set -euo pipefail
+          read -r rt_v rt_tb rt_rel < <(ruby tools/pins.rb --runtimes hello-ruby | head -1)
+          RT_V="$rt_v" RT_TEBAKO="$rt_tb" RELEASE_TAG="$rt_rel" \
+            FACTORY_REPO="$(ruby -ryaml -e "puts YAML.load_file('Tebakofile').dig('apps', 'hello-ruby', 'factory')")" \
+            HOST_IDS=macos-arm64 MIRROR="$PWD/out/runtime-mirror" tools/stage_runtime
+          mkdir -p "$TEBAKO_HOME"
+          printf 'runtimes:\n  ruby: {version: "%s", tebako: "%s"}\n' "$rt_v" "$rt_tb" >> "$TEBAKO_HOME/config.yaml"
+
+      - name: Install base + slice into the scratch store
+        # Bare .tfs images install only through a registry (spec 07 §3 —
+        # a path install is for stitched packages). This leg proves the
+        # STORE behavior, not the release plumbing (the publish job's own
+        # verify covers that): publish both payloads to a file:// mirror
+        # (zero network — publish's built-in verify rides the mirror),
+        # then re-point the generated registry at the mirror in the
+        # universal form (per-triplet rows require a service ref, spec 04
+        # §2) and install by name — registry installs register the shims.
+        run: |
+          set -euo pipefail
+          TEBAKO_CLI="$PWD/.tools/tebako"
+          mirror="$PWD/out/publish-mirror"
+          reg="$PWD/out/acceptance-registry.yaml"
+          tag="slice-acceptance"
+          # The registry lands under out/ (untracked): this leg never
+          # touches the repo's real tpkg-registry.yaml (the publish job
+          # owns that file at release time).
+          for app in hello-ruby hello-flavor-acme; do
+            "$TEBAKO_CLI" publish --name "$app" \
+              --release "tfs:github:tebako-packages/hello-runtimes:$tag" \
+              --payload "aarch64-macos=$PWD/out/aarch64-macos/$app-$PKG_VERSION-$HOST_ID.tfs" \
+              --registry-out "$reg" \
+              --upload-mirror "$mirror"
+          done
+          ruby -ryaml -e '
+            mirror, tag, reg = ARGV.fetch(0), ARGV.fetch(1), ARGV.fetch(2)
+            doc = YAML.load_file(reg)
+            doc["payloads"].each do |p|
+              p["versions"].each do |v|
+                _trip, row = v["platforms"].first
+                v["platforms"] = "universal"
+                v["release"]["ref"] = "file://#{mirror}/#{tag}/#{row["artifact"]}?sha256=#{row["sha256"]}"
+              end
+            end
+            File.write(reg.sub(/\.yaml$/, "-file.yaml"), doc.to_yaml)
+          ' "$mirror" "$tag" "$reg"
+          "$TEBAKO_CLI" add-registry "file://${reg%.yaml}-file.yaml"
+          "$TEBAKO_CLI" install "hello-ruby@$PKG_VERSION"
+          "$TEBAKO_CLI" install "hello-flavor-acme@$PKG_VERSION"
+          # The version chain's explicit pin (no registry default read at
+          # dispatch in this leg — the chain links env/project/config all
+          # resolve before the registry link).
+          "$TEBAKO_CLI" shim use hello-ruby "$PKG_VERSION"
+
+      - name: The slice attaches (auto-discovery)
+        env:
+          TEBAKO_RUNTIME_MIRROR: file://${{ github.workspace }}/out/runtime-mirror
+        run: |
+          set -euo pipefail
+          out="$("$TEBAKO_HOME/shims/hello-ruby")"
+          echo "$out"
+          grep -q "Hello from tebako" <<<"$out"
+          grep -q "acme flavor 0.1.0" <<<"$out" \
+            || { echo "::error::the installed slice did not attach — the tag line is missing"; exit 1; }
+          grep -q "event=slice-augment" "$TEBAKO_HOME/journal.log" \
+            || { echo "::error::no slice-augment journal event for the attach"; exit 1; }
+
+      - name: "auto_slices: false kills the scan; the env pin re-attaches"
+        env:
+          TEBAKO_RUNTIME_MIRROR: file://${{ github.workspace }}/out/runtime-mirror
+        run: |
+          set -euo pipefail
+          echo "auto_slices: false" >> "$TEBAKO_HOME/config.yaml"
+          out="$("$TEBAKO_HOME/shims/hello-ruby")"
+          echo "$out"
+          if grep -q "acme flavor" <<<"$out"; then
+            echo "::error::auto_slices: false but the slice still attached"; exit 1
+          fi
+          out2="$(TEBAKO_HELLO_RUBY_SLICES="hello-flavor-acme@$PKG_VERSION" "$TEBAKO_HOME/shims/hello-ruby")"
+          echo "$out2"
+          grep -q "acme flavor 0.1.0" <<<"$out2" \
+            || { echo "::error::the env pin did not attach the slice"; exit 1; }
+
   publish:
     if: ${{ always() && !cancelled() && inputs.publish && needs.build.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
     needs: [plan, build]
@@ -228,7 +380,7 @@ jobs:
           printf '%s\n' "$TEBAKO_SIGNING_KEY" > "$TEBAKO_HOME/keys/ci-signing.key"
           chmod 600 "$TEBAKO_HOME/keys/ci-signing.key"
           mirror="$(mktemp -d)"
-          for app in hello-ruby hello-python hello-java; do
+          for app in hello-ruby hello-python hello-java hello-flavor-acme; do
             # shellcheck disable=SC2046  # --payload-args MUST word-split into the per-triplet --payload pairs
             args="$(ruby tools/pins.rb --payload-args "$app")"
             # 1. PROVE, zero network: the full clean-cache install
