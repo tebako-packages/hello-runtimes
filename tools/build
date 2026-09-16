@@ -36,7 +36,7 @@ step() { printf '\n== %s\n' "$*"; }
 APP="${APP:?build: APP unset (pins.rb --env)}"
 TRIPLET="${TRIPLET:?build: TRIPLET unset}"
 HOST_ID="${HOST_ID:?build: HOST_ID unset}"
-VERSION="${VERSION:-$(ruby -ryaml -e "puts YAML.load_file('$FEEDSTOCK/recipe.yml').fetch('version')")}"
+VERSION="${VERSION:-$(ruby -ryaml -e "puts YAML.load_file('$FEEDSTOCK/Tebakofile').fetch('version')")}"
 TFS_CLI="${TFS_CLI:-tfs}"
 WORK="$FEEDSTOCK/out/work-$APP-$TRIPLET"
 OUT="$FEEDSTOCK/out/$TRIPLET"

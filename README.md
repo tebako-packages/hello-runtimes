@@ -50,7 +50,7 @@ dispatch path, or a signing surface regressed.
 - `apps/<name>/` — the app sources (copied verbatim into the image).
 - `manifests/<name>.yaml` — the in-image manifest templates
   (`@@…@@` filled by `tools/build`).
-- `recipe.yml` — the SSOT: suite version, tool pins (digest-pinned
+- `Tebakofile` — the SSOT: suite version, tool pins (digest-pinned
   against the release's own SHA256SUMS), per-app runtime lines,
   platforms, CI hosts, signing keyid.
 - `tools/` — `pins.rb` (recipe → CI matrix/env/payload-args) /

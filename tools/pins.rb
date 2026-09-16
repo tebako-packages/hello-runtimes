@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# tools/pins.rb — recipe.yml → CI glue. Modes:
+# tools/pins.rb — Tebakofile → CI glue. Modes:
 #   --matrix              the GHA include list: one entry per
 #                         (app × platform) leg; each entry carries the
 #                         app's runtime line(s) as a JSON list — the
@@ -14,7 +14,7 @@
 #                         leg's stage+smoke loop)
 #   --payload-args        the publish step's --payload pairs
 #
-# recipe.yml is the SSOT; this tool carries no version literals.
+# Tebakofile is the SSOT; this tool carries no version literals.
 
 require "json"
 require "yaml"
@@ -24,7 +24,7 @@ require "yaml"
 # release tag becomes "v0.16.23\r" and gh answers "release not found").
 $stdout.binmode
 
-RECIPE = YAML.load_file(File.join(__dir__, "..", "recipe.yml")).freeze
+RECIPE = YAML.load_file(File.join(__dir__, "..", "Tebakofile")).freeze
 
 # triplet → factory host_id (Platform::HOST_IDS) — asserted identical in
 # name form only where the factories agree; a divergence fails loudly.

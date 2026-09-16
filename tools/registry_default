@@ -4,7 +4,7 @@
 # registry_default REGISTRY VERSION — the suite's publish-time default
 # policy.
 #
-# The suite versions together (recipe.yml: "every payload in the suite
+# The suite versions together (Tebakofile: "every payload in the suite
 # versions together"), so a publish moves every payload's registry
 # `default:` to the tag's version. The product's registry upsert
 # deliberately never moves an existing default (tebako-cli publish.rs:

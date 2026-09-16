@@ -54,7 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v6.0.0
 
-      - name: Leg env (recipe.yml is the SSOT)
+      - name: Leg env (Tebakofile is the SSOT)
         run: ruby tools/pins.rb --env "${{ matrix.app }}" "${{ matrix.triplet }}" >> "$GITHUB_ENV"
 
       - name: Set up the hosted JDK 21 (java legs only)
@@ -85,7 +85,7 @@ jobs:
           for asset in "$TEBAKO_ASSET" "$TFS_ASSET"; do
             want="$(grep "  $asset\$" SHA256PINS | cut -d' ' -f1)"
             got="$(grep "  $asset\$" SHA256SUMS | cut -d' ' -f1 || true)"
-            [ "$got" = "$want" ] || { echo "::error::pin mismatch for $asset: recipe.yml=$want release=${got:-ABSENT}"; exit 1; }
+            [ "$got" = "$want" ] || { echo "::error::pin mismatch for $asset: Tebakofile=$want release=${got:-ABSENT}"; exit 1; }
           done
           chmod +x "$TEBAKO_ASSET" "$TFS_ASSET"
           # Normalize to .tools/tebako + .tools/tfs (the .exe suffix kept
@@ -197,14 +197,14 @@ jobs:
           for app in hello-ruby hello-python hello-java; do
             read -r rt_v rt_tb rt_rel < <(ruby tools/pins.rb --runtimes "$app" | head -1)
             RT_V="$rt_v" RT_TEBAKO="$rt_tb" RELEASE_TAG="$rt_rel" \
-              FACTORY_REPO="$(ruby -ryaml -e "puts YAML.load_file('recipe.yml').dig('apps', '$app', 'factory')")" \
+              FACTORY_REPO="$(ruby -ryaml -e "puts YAML.load_file('Tebakofile').dig('apps', '$app', 'factory')")" \
               HOST_IDS=macos-arm64 MIRROR="$PWD/out/runtime-mirror" tools/stage_runtime
           done
           mkdir -p "$HOME/.tebako"
           {
             echo "runtimes:"
             for app in hello-ruby hello-python hello-java; do
-              engine="$(ruby -ryaml -e "puts YAML.load_file('recipe.yml').dig('apps', '$app', 'engine')")"
+              engine="$(ruby -ryaml -e "puts YAML.load_file('Tebakofile').dig('apps', '$app', 'engine')")"
               read -r rt_v rt_tb rt_rel < <(ruby tools/pins.rb --runtimes "$app" | head -1)
               printf '  %s: {version: "%s", tebako: "%s"}\n' "$engine" "$rt_v" "$rt_tb"
             done
@@ -254,7 +254,7 @@ jobs:
           done
 
       - name: Registry default tracks the suite line
-        # The suite versions together (recipe.yml): a publish moves every
+        # The suite versions together (Tebakofile): a publish moves every
         # payload's registry `default:` to the tag's version. `tebako
         # publish` deliberately never moves an existing default (a default
         # moves by explicit act only) — this tool call is the suite's.
