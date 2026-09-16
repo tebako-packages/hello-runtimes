@@ -177,6 +177,17 @@ case "$CHANNEL" in
         puts s["filename"], s["image"]["filename"]
         puts s["dll"]["filename"] if s.dig("dll", "filename")
       ' "$REL_DL/$shard")
+      # The declared OpenPGP sidecars (spec 09 §4): the shard owns the
+      # .asc spellings; a declared signature must be fetchable or the
+      # resolver refuses the mirror (exit 71). Unsigned releases declare
+      # none and fetch none.
+      while IFS= read -r sig; do
+        dl "$sig"
+      done < <(ruby -rjson -e '
+        $stdout.binmode
+        s = JSON.parse(File.read(ARGV[0]))
+        puts s.dig("signature", "asc").to_s, s.dig("image", "signature", "asc").to_s, s.dig("dll", "signature", "asc").to_s
+      ' "$REL_DL/$shard" | sed '/^$/d')
     done < "$SHARDS"
     ;;
   *) die "unknown channel: $CHANNEL (release | run-artifacts)" ;;
@@ -238,8 +249,9 @@ if [ "$CHANNEL" = "release" ]; then
       end
       checks.each { |k, (got, want)| got == want or abort("stage_runtime: #{k} divergence: #{got.inspect} != #{want.inspect}") }
       puts shard["filename"], shard.dig("image", "filename"), shard.dig("dll", "filename").to_s, shard.dig("dll", "install_as").to_s, shard["abi"] || "-"
+      puts shard.dig("signature", "asc").to_s, shard.dig("image", "signature", "asc").to_s, shard.dig("dll", "signature", "asc").to_s
     ' "$REL_DL/$shard" "$stem" "$RT_TEBAKO" "$RT_V" "$host_of_stem")" || die "digest parity failed for $shard"
-    { IFS= read -r exe_asset; IFS= read -r img_asset; IFS= read -r dll_asset; IFS= read -r install_as; IFS= read -r abi; } <<< "$shard_fields"
+    { IFS= read -r exe_asset; IFS= read -r img_asset; IFS= read -r dll_asset; IFS= read -r install_as; IFS= read -r abi; IFS= read -r exe_asc; IFS= read -r img_asc; IFS= read -r dll_asc; } <<< "$shard_fields"
     [ "$abi" = "-" ] && abi=""
     # 2. The bytes against their .sha256 sidecars (the trust anchor) —
     #    exe, env image, and the windows dll when the shard names one.
@@ -254,6 +266,14 @@ if [ "$CHANNEL" = "release" ]; then
     cp "$REL_DL/$exe_asset" "$REL_DL/$img_asset" "$REL_DL/$shard" "$DEST/"
     cp "$REL_DL/$exe_asset.sha256" "$REL_DL/$img_asset.sha256" "$DEST/"
     cat "$REL_DL/$exe_asset.sha256" "$REL_DL/$img_asset.sha256" >> "$DEST/SHA256SUMS.txt"
+    # Declared .asc sidecars ride verbatim — the resolver's spec 09 §4
+    # guard refuses a mirror that declares a signature it cannot serve.
+    for sig in "$exe_asc" "$img_asc" ${dll_asc:+"$dll_asc"}; do
+      if [ -n "$sig" ]; then
+        [ -f "$REL_DL/$sig" ] || die "shard declares $sig but the download is missing it"
+        cp "$REL_DL/$sig" "$DEST/"
+      fi
+    done
     if [ -n "$dll_asset" ]; then
       cp "$REL_DL/$dll_asset" "$REL_DL/$dll_asset.sha256" "$DEST/"
       cat "$REL_DL/$dll_asset.sha256" >> "$DEST/SHA256SUMS.txt"
