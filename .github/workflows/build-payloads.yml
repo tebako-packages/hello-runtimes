@@ -164,7 +164,7 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v6.0.0
 
-      - name: Leg env (recipe.yml is the SSOT)
+      - name: Leg env (Tebakofile is the SSOT)
         run: ruby tools/pins.rb --env hello-ruby aarch64-macos >> "$GITHUB_ENV"
 
       - name: Fetch the pinned tebako tools (sha256-verified)
@@ -211,7 +211,7 @@ jobs:
           set -euo pipefail
           read -r rt_v rt_tb rt_rel < <(ruby tools/pins.rb --runtimes hello-ruby | head -1)
           RT_V="$rt_v" RT_TEBAKO="$rt_tb" RELEASE_TAG="$rt_rel" \
-            FACTORY_REPO="$(ruby -ryaml -e "puts YAML.load_file('recipe.yml').dig('apps', 'hello-ruby', 'factory')")" \
+            FACTORY_REPO="$(ruby -ryaml -e "puts YAML.load_file('Tebakofile').dig('apps', 'hello-ruby', 'factory')")" \
             HOST_IDS=macos-arm64 MIRROR="$PWD/out/runtime-mirror" tools/stage_runtime
           mkdir -p "$TEBAKO_HOME"
           printf 'runtimes:\n  ruby: {version: "%s", tebako: "%s"}\n' "$rt_v" "$rt_tb" >> "$TEBAKO_HOME/config.yaml"
