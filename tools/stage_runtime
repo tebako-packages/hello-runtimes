@@ -5,7 +5,7 @@
 # assets), ready for TEBAKO_RUNTIME_MIRROR=file://<mirror> and the
 # store's `runtimes:` pin for the engine.
 #
-# Channels (README decision 4 — ONE variable, recipe.yml
+# Channels (README decision 4 — ONE variable, Tebakofile
 # build.runtime.channel):
 #   release        (the default) — the factory's SHARD model (factory
 #                  releases v0.2.0 and up): the release serves per-package
@@ -53,7 +53,7 @@
 # no release line ever references a run artifact.
 #
 # Inputs (env — required unless noted; the workflow supplies them from
-# tools/pins.rb, recipe.yml stays the SSOT):
+# tools/pins.rb, Tebakofile stays the SSOT):
 #   RT_V           the runtime's language version (e.g. 4.0.6, 3.14.7, 21.0.12)
 #   RT_TEBAKO      the runtime package's tebako line (the factory's VERSION)
 #   RELEASE_TAG    the factory release tag (release channel)
@@ -103,7 +103,7 @@ HOST_IDS="${HOST_IDS:-linux-gnu-x86_64 linux-gnu-arm64 linux-musl-x86_64 linux-m
 
 case "$CHANNEL" in
   run-artifacts)
-    [ -n "$FACTORY_RUN" ] || die "no factory run pinned (recipe.yml build.runtime.factory_run)"
+    [ -n "$FACTORY_RUN" ] || die "no factory run pinned (Tebakofile build.runtime.factory_run)"
     step "download run artifacts of $FACTORY_REPO run $FACTORY_RUN (runtime $RT_V)"
     mkdir -p "$RUN_DL"
     for host_id in $HOST_IDS; do
@@ -115,7 +115,7 @@ case "$CHANNEL" in
     done
     ;;
   release)
-    [ -n "$RELEASE_TAG" ] || die "no factory release pinned (recipe.yml build.runtime.release)"
+    [ -n "$RELEASE_TAG" ] || die "no factory release pinned (Tebakofile build.runtime.release)"
     step "download $FACTORY_REPO release $RELEASE_TAG (runtime $RT_V, tebako $RT_TEBAKO — shard model)"
     mkdir -p "$REL_DL"
     # Enumerate the release's assets once (gh's built-in --jq — no jq
