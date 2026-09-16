@@ -43,8 +43,8 @@ apps:
     engine: ruby
     factory: tamatebako/tebako-runtime-ruby
     runtimes:
-      - {version: "4.0.6",  tebako: "0.16.23", release: "v0.16.23"}
-      - {version: "3.3.12", tebako: "0.16.23", release: "v0.16.23"}
+      - {version: "4.0.6",  tebako: "0.16.24", release: "v0.16.24"}
+      - {version: "3.3.12", tebako: "0.16.24", release: "v0.16.24"}
     platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
   hello-python:
     engine: python
