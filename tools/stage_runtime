@@ -216,6 +216,10 @@ if [ "$CHANNEL" = "release" ]; then
     #    DISCOVERED, never assumed: every factory names it after its
     #    engine (ruby_version / python_version / java_version) — exactly
     #    one non-tebako, non-contract *_version key must exist. The
+    #    additive `language_version` facet (truffleruby: the ruby-compat
+    #    line beside the implementation's own ruby_version) is NOT the
+    #    runtime's own line key and stays out of the discovery — it
+    #    rides the shard verbatim into the derived index. The
     #    windows shard's dll facet is validated the same way (install_as
     #    must be a bare PE name — the resolver's own guard, mirrored
     #    here so a malformed facet fails at staging). Prints, in fixed
@@ -229,7 +233,7 @@ if [ "$CHANNEL" = "release" ]; then
       shard = JSON.parse(File.read(shard_path))
       dir = File.dirname(shard_path)
       sidecar = ->(a) { File.read(File.join(dir, "#{a}.sha256")).split.first }
-      vkeys = shard.keys.grep(/_version\z/) - %w[tebako_version contract_version]
+      vkeys = shard.keys.grep(/_version\z/) - %w[tebako_version contract_version language_version]
       abort("stage_runtime: #{shard["filename"]}: expected exactly one language-version key, found #{vkeys.inspect}") unless vkeys.one?
       lang = shard[vkeys.first].to_s
       checks = {
