@@ -1,0 +1,36 @@
+# tebako-wxs-bootstrap-wix5.patch — make the pinned product WiX
+# template's web-bootstrapper block compile under the pinned toolchain
+# (wix 5.0.2). The block is preprocessed out in the product's own
+# pipeline (BOOTSTRAP_REGISTRY never bound there), so the two errors
+# surface only for a client binding it — reported upstream as
+# https://github.com/tamatebako/tebako/issues/623. Both fixes are
+# behavior-preserving:
+#   1. BundleHome gets an explicit stable component Guid (a File +
+#      registry keypath component cannot use the auto-guid; the GUID is
+#      LOCKED for the life of this component).
+#   2. The BootstrapSeed sequence condition moves from inner text
+#      (rejected by WiX v5) to the Condition attribute.
+# Applied by tools/install_msi to a WORKING COPY of the template — the
+# digest-verified .install-src tree is never mutated. Drop this patch
+# once the pinned template tag carries the upstream fix.
+--- a/templates/installers/windows/tebako.wxs
++++ b/templates/installers/windows/tebako.wxs
+@@ -110,7 +110,8 @@
+     <!-- The web-bootstrapper payload (spec 16 §7): the seed script at the
+          install root + the home\shims grammar marker (spec 05 §3.1) + the
+          shims dir on PATH. -->
+-    <Component Id="BundleHome" Directory="INSTALLFOLDER">
++    <Component Id="BundleHome" Directory="INSTALLFOLDER"
++                   Guid="4B8C7E90-9F26-4469-9490-A495EA220806">
+       <File Source="$(var.BinDir)\bootstrap-seed.cmd" />
+       <CreateFolder Directory="HOMESHIMSFOLDER" />
+       <Environment Id="BundleShimsPath"
+@@ -147,7 +148,7 @@
+                   Return="ignore" />
+     <InstallExecuteSequence>
+       <Custom Action="BootstrapSeed.SetProperty" Before="BootstrapSeed" />
+-      <Custom Action="BootstrapSeed" After="InstallFiles">NOT Installed</Custom>
++      <Custom Action="BootstrapSeed" After="InstallFiles" Condition="NOT Installed" />
+     </InstallExecuteSequence>
+ <?endif?>
+   </Package>
