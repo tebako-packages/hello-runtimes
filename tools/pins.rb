@@ -153,7 +153,10 @@ when "--installer-env"
     ["BOOTSTRAP_WARM", warm.join(" ")],
     # The fat composition presses against the app's FIRST runtime line.
     ["RT_V", rt.fetch("version")],
-    ["RT_TEBAKO", rt.fetch("tebako")]
+    ["RT_TEBAKO", rt.fetch("tebako")],
+    # The Windows-fat line override (empty when the Tebakofile drops the
+    # carry — the workflow falls back to RT_TEBAKO).
+    ["FAT_RT_TEBAKO_WINDOWS", inst.fetch("fat_windows_runtime_tebako", "")]
   ].each { |k, v| puts "#{k}=#{v}" }
 when "--installer-sources"
   # "<repo>\t<resolved ref>\t<path>\t<sha256>" per line — the fetcher's

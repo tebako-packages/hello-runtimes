@@ -46,6 +46,22 @@ OUT="$FEEDSTOCK/out/installers"
 rm -rf "$IN"
 mkdir -p "$IN" "$OUT"
 
+# The pinned template's web-bootstrapper block does not compile under
+# the pinned WiX v5 toolchain (the product's own pipeline never binds
+# it — upstream issue tamatebako/tebako#623). Carry the minimal fix as
+# a reviewable patch applied to a WORKING COPY; the digest-verified
+# .install-src tree is never mutated, and a failed apply fails the
+# build here, named (a bumped template tag that absorbs the fix breaks
+# the apply — drop the patch then).
+WORK="$FEEDSTOCK/out/wxs-work"
+rm -rf "$WORK"
+mkdir -p "$WORK/templates/installers/windows"
+cp "$WXS" "$WORK/templates/installers/windows/tebako.wxs"
+command -v git >/dev/null 2>&1 || die "git not on PATH (applies the carried template patch)"
+(cd "$WORK" && git apply "$FEEDSTOCK/patches/tebako-wxs-bootstrap-wix5.patch") \
+  || die "the carried template patch does not apply — if the pinned tag absorbed tamatebako/tebako#623, drop patches/tebako-wxs-bootstrap-wix5.patch"
+WXS="$WORK/templates/installers/windows/tebako.wxs"
+
 ASSET="$PRODUCT_NAME-setup-$PKG_VERSION-$HOST_ID.msi"
 # MSI ProductVersion is a strict numeric triplet; the suite version is one
 # by construction, but keep the guard (a rehearsal on an odd ref must
