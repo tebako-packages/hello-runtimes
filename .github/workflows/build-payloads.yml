@@ -413,6 +413,10 @@ jobs:
         run: ruby tools/registry_default tpkg-registry.yaml "${{ github.ref_name }}"
 
       - name: Registry PR (main is protected)
+        env:
+          # The CI PAT authors the PR: a GITHUB_TOKEN-authored PR's checks
+          # sit on the approval queue until they expire red.
+          GH_TOKEN: ${{ secrets.TEBAKO_CI_PAT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           git config user.name "tebako-ci" && git config user.email "tebako@ribose.com"
