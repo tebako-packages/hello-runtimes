@@ -102,25 +102,44 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          while read -r rt_v rt_tb rt_rel; do
+          while read -r rt_v rt_tb rt_rel ow_f ow_v ow_tb ow_rel; do
             echo "== $APP on $rt_v (tebako $rt_tb, $rt_rel)"
+            MIRROR="$PWD/out/mirror-$rt_v"
             RT_V="$rt_v" RT_TEBAKO="$rt_tb" RELEASE_TAG="$rt_rel" \
-              HOST_IDS="$HOST_ID" MIRROR="$PWD/out/mirror-$rt_v" tools/stage_runtime
+              HOST_IDS="$HOST_ID" MIRROR="$MIRROR" tools/stage_runtime
             # The shard owns the exe/image asset spellings (factories
             # differ on the windows .exe suffix) — the staged pair's
             # literal names FLOW from the per-stem file; compose nothing.
             stem="tebako-runtime-$rt_tb-$rt_v-$HOST_ID"
-            . "$PWD/out/mirror-$rt_v/v$rt_tb/$stem.stage.env"
+            . "$MIRROR/v$rt_tb/$stem.stage.env"
             exe="$RUNTIME_EXE"
             img="$RUNTIME_IMAGE"
+            # The runtime-on-runtime composition (jruby/truffleruby): the
+            # recipe's runtime line names its OWNER — stage the owner
+            # line into the same mirror (its own tebako line's subdir,
+            # never colliding) and flow its staged pair + the depending
+            # shard's declared mount to the smoke.
+            owner_env=()
+            if [ -n "${ow_f:-}" ]; then
+              echo "== owner: $ow_f $ow_v (tebako $ow_tb, $ow_rel)"
+              RT_V="$ow_v" RT_TEBAKO="$ow_tb" RELEASE_TAG="$ow_rel" \
+                FACTORY_REPO="$ow_f" HOST_IDS="$HOST_ID" MIRROR="$MIRROR" tools/stage_runtime
+              ow_stem="tebako-runtime-$ow_tb-$ow_v-$HOST_ID"
+              . "$MIRROR/v$ow_tb/$ow_stem.stage.env"
+              ow_mount="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).fetch("on_runtime").fetch("mount")' "$MIRROR/v$rt_tb/$stem.manifest.json")"
+              owner_env=(OWNER_EXE="$RUNTIME_EXE" OWNER_IMAGE="$RUNTIME_IMAGE" OWNER_MOUNT="$ow_mount")
+            fi
             # Native windows tools cannot read Git Bash's POSIX path
             # spellings — go windows-form where cygpath exists (inert
             # on POSIX).
             if command -v cygpath >/dev/null 2>&1; then
               exe="$(cygpath -m "$exe")"
               img="$(cygpath -m "$img")"
+              if [ ${#owner_env[@]} -gt 0 ]; then
+                owner_env=(OWNER_EXE="$(cygpath -m "${owner_env[0]#OWNER_EXE=}")" OWNER_IMAGE="$(cygpath -m "${owner_env[1]#OWNER_IMAGE=}")" "OWNER_MOUNT=$ow_mount")
+              fi
             fi
-            RUNTIME="$exe" RUNTIME_IMAGE="$img" \
+            env RUNTIME="$exe" RUNTIME_IMAGE="$img" ${owner_env[@]+"${owner_env[@]}"} \
               TFS="$PWD/.tools/tfs" TEBAKO="$PWD/.tools/tebako" \
               tools/boot_smoke "out/$TRIPLET/$APP-$PKG_VERSION-$HOST_ID.tfs"
           done < <(ruby tools/pins.rb --runtimes "$APP")
@@ -352,6 +371,18 @@ jobs:
               FACTORY_REPO="$(ruby -ryaml -e "puts YAML.load_file('Tebakofile').dig('apps', '$app', 'factory')")" \
               HOST_IDS=macos-arm64 MIRROR="$PWD/out/runtime-mirror" tools/stage_runtime
           done
+          # The composition apps (jruby/truffleruby): stage the depending
+          # line AND its openjdk owner line into the same mirror — each
+          # tebako line lands in its own v<line>/ subdir, and two
+          # factories sharing a line accumulate in its derived index.
+          for app in hello-jruby hello-truffleruby; do
+            read -r rt_v rt_tb rt_rel ow_f ow_v ow_tb ow_rel < <(ruby tools/pins.rb --runtimes "$app" | head -1)
+            RT_V="$rt_v" RT_TEBAKO="$rt_tb" RELEASE_TAG="$rt_rel" \
+              FACTORY_REPO="$(ruby -ryaml -e "puts YAML.load_file('Tebakofile').dig('apps', '$app', 'factory')")" \
+              HOST_IDS=macos-arm64 MIRROR="$PWD/out/runtime-mirror" tools/stage_runtime
+            RT_V="$ow_v" RT_TEBAKO="$ow_tb" RELEASE_TAG="$ow_rel" \
+              FACTORY_REPO="$ow_f" HOST_IDS=macos-arm64 MIRROR="$PWD/out/runtime-mirror" tools/stage_runtime
+          done
           mkdir -p "$HOME/.tebako"
           {
             echo "runtimes:"
@@ -361,6 +392,21 @@ jobs:
               printf '  %s: {version: "%s", tebako: "%s"}\n' "$engine" "$rt_v" "$rt_tb"
             done
           } >> "$HOME/.tebako/config.yaml"
+          # The composition apps verify under ISOLATED stores: their
+          # pins (ruby → the implementation line, java → the owner line)
+          # would collide with the engine-keyed pins above (one engine,
+          # two lines — the map keys by engine). Each store pins exactly
+          # the app's two lines; the global mirror still serves bytes.
+          for app in hello-jruby hello-truffleruby; do
+            store="$PWD/.store-$app"
+            mkdir -p "$store/keys"
+            read -r rt_v rt_tb _ ow_f ow_v ow_tb _ < <(ruby tools/pins.rb --runtimes "$app" | head -1)
+            {
+              echo "runtimes:"
+              printf '  ruby: {version: "%s", tebako: "%s"}\n' "$rt_v" "$rt_tb"
+              printf '  java: {version: "%s", tebako: "%s"}\n' "$ow_v" "$ow_tb"
+            } > "$store/config.yaml"
+          done
 
       - name: Publish payloads + registry
         env:
@@ -380,7 +426,16 @@ jobs:
           printf '%s\n' "$TEBAKO_SIGNING_KEY" > "$TEBAKO_HOME/keys/ci-signing.key"
           chmod 600 "$TEBAKO_HOME/keys/ci-signing.key"
           mirror="$(mktemp -d)"
-          for app in hello-ruby hello-python hello-java hello-flavor-acme; do
+          for app in hello-ruby hello-python hello-java hello-flavor-acme hello-jruby hello-truffleruby; do
+            # The composition apps verify under their isolated stores
+            # (the pins staged above); the CI signing key rides along.
+            PUB_HOME="$TEBAKO_HOME"
+            case "$app" in
+              hello-jruby|hello-truffleruby)
+                PUB_HOME="$PWD/.store-$app"
+                cp "$TEBAKO_HOME/keys/ci-signing.key" "$PUB_HOME/keys/"
+                ;;
+            esac
             # shellcheck disable=SC2046  # --payload-args MUST word-split into the per-triplet --payload pairs
             args="$(ruby tools/pins.rb --payload-args "$app")"
             # 1. PROVE, zero network: the full clean-cache install
@@ -390,7 +445,7 @@ jobs:
             #    a coin flip against the CI NAT pool's shared 60/h
             #    anonymous bucket (proven drained mid-job live), plus a
             #    read-after-write race with the asset index.
-            "$TEBAKO_CLI" publish --sign="$SIGNING_KEYID" --name "$app" \
+            env TEBAKO_HOME="$PUB_HOME" "$TEBAKO_CLI" publish --sign="$SIGNING_KEYID" --name "$app" \
               --release "tfs:github:tebako-packages/hello-runtimes:${{ github.ref_name }}" \
               $args \
               --registry-out "$PWD/tpkg-registry.yaml" \
@@ -398,7 +453,7 @@ jobs:
             # 2. SHIP: authenticated API calls only (ensure-release +
             #    uploads). The mirror leg already proved the install —
             #    the uploaded bytes are the same files.
-            "$TEBAKO_CLI" publish --sign="$SIGNING_KEYID" --name "$app" \
+            env TEBAKO_HOME="$PUB_HOME" "$TEBAKO_CLI" publish --sign="$SIGNING_KEYID" --name "$app" \
               --release "tfs:github:tebako-packages/hello-runtimes:${{ github.ref_name }}" \
               $args \
               --registry-out "$PWD/tpkg-registry.yaml" \

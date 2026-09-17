@@ -1,0 +1,46 @@
+schema_version: 1
+# Payload manifest for hello-truffleruby (filled by tools/build).
+identity:
+  schema_version: 1
+  kind: app
+  name: "hello-truffleruby"
+  version: "@@VERSION@@"
+  producer: {tool: feedstock-build, tool_version: "1"}
+  created: "@@CREATED@@"                      # pinned at release time
+  source:
+    commit: "@@FEEDSTOCK_SHA@@"
+    builder: "@@BUILDER@@"                    # "gha:run:<id>" on CI builds
+  digest:
+    tree_hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"  # placeholder until the CAS lands
+    blob_sha256: "@@BLOB_SHA256@@"
+  signing: {state: unsigned}
+  encryption: {state: none}
+  annotations: {sample: hello-runtimes, runtime: truffleruby}
+provides:
+  entrypoints:
+    - name: hello-truffleruby
+      path: /app/hello.rb
+      args_default: []
+      runtime_requirement:
+        # Pure-language payload (stdlib only): a version RANGE on the
+        # implementation's own line — an implementation-narrowed edge
+        # matches the runtime's own version (truffleruby 34.0.1), never
+        # an abi line (no native extensions here). The implementation pin
+        # keeps the sample deterministic.
+        engine: ruby
+        implementation: truffleruby
+        constraint: ">= 34, < 35"
+  platforms: []                   # filled by tools/build from the leg's
+                                  # triplet (the template stays parseable)
+  capabilities: {exec: true, read: true}
+requires:
+  - kind: language
+    engine: ruby
+    implementation: truffleruby
+    constraint: ">= 34, < 35"
+checks:
+  run:
+    entry: /app/hello.rb
+    argv: []
+    expect: {exit: 0}
+    timeout: 120

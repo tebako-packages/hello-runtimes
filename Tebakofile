@@ -65,6 +65,34 @@ apps:
     # macos-arm64, windows-ucrt64) — aarch64-linux and x86_64-macos legs
     # join when the factory ships those packages.
     platforms: [x86_64-linux-gnu, aarch64-macos, x86_64-windows-ucrt]
+  hello-jruby:
+    engine: ruby
+    factory: tamatebako/tebako-runtime-jruby
+    runtimes:
+      # The jruby wrapper composes onto its declared OWNER at dispatch
+      # (the runtime-on-runtime composition): the legs stage the owner
+      # line beside the depending one so the smoke's owner-side handoff
+      # resolves without a network.
+      - version: "10.1.1.0"
+        tebako: "2.5.0"
+        release: "v2.5.0"
+        owner: {engine: java, implementation: temurin, version: "21.0.12", tebako: "2.7.0", release: "v2.7.0", factory: tamatebako/tebako-runtime-openjdk}
+    # The jruby factory ships linux-gnu-x86_64 + macos-arm64 today (a
+    # universal env image; the wrapper exe per platform) — further legs
+    # join when the factory ships them.
+    platforms: [x86_64-linux-gnu, aarch64-macos]
+  hello-truffleruby:
+    engine: ruby
+    factory: tamatebako/tebako-runtime-truffleruby
+    runtimes:
+      # Same composition as jruby, on the graalvm owner flavor.
+      - version: "34.0.1"
+        tebako: "2.5.0"
+        release: "v2.5.0"
+        owner: {engine: java, implementation: graalvm, version: "25.0.4.1", tebako: "2.7.0", release: "v2.7.0", factory: tamatebako/tebako-runtime-openjdk}
+    # The truffleruby factory ships linux-gnu-x86_64 + macos-arm64 (jvm
+    # mode) today.
+    platforms: [x86_64-linux-gnu, aarch64-macos]
   hello-flavor-acme:
     # The reference EXTENSION slice (spec 03 §2.8): toolkit-kind content
     # that augments hello-ruby (the reverse edge is in its manifest, not

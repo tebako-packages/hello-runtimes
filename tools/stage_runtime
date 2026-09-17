@@ -216,6 +216,10 @@ if [ "$CHANNEL" = "release" ]; then
     #    DISCOVERED, never assumed: every factory names it after its
     #    engine (ruby_version / python_version / java_version) — exactly
     #    one non-tebako, non-contract *_version key must exist. The
+    #    additive `language_version` facet (truffleruby: the ruby-compat
+    #    line beside the implementation's own ruby_version) is NOT the
+    #    runtime's own line key and stays out of the discovery — it
+    #    rides the shard verbatim into the derived index. The
     #    windows shard's dll facet is validated the same way (install_as
     #    must be a bare PE name — the resolver's own guard, mirrored
     #    here so a malformed facet fails at staging). Prints, in fixed
@@ -229,7 +233,7 @@ if [ "$CHANNEL" = "release" ]; then
       shard = JSON.parse(File.read(shard_path))
       dir = File.dirname(shard_path)
       sidecar = ->(a) { File.read(File.join(dir, "#{a}.sha256")).split.first }
-      vkeys = shard.keys.grep(/_version\z/) - %w[tebako_version contract_version]
+      vkeys = shard.keys.grep(/_version\z/) - %w[tebako_version contract_version language_version]
       abort("stage_runtime: #{shard["filename"]}: expected exactly one language-version key, found #{vkeys.inspect}") unless vkeys.one?
       lang = shard[vkeys.first].to_s
       checks = {
@@ -309,9 +313,11 @@ EOF
   # The trimmed monolith, derived consumer-side: each shard IS its
   # manifest entry; deterministic order by filename. A partial mirror
   # never advertises bytes it does not carry — the derived index spans
-  # exactly the staged stems.
-  shard_paths=()
-  while IFS= read -r s; do shard_paths+=("$REL_DL/$s"); done < "$SHARDS"
+  # exactly the shards STAGED IN $DEST: repeated invocations into one
+  # mirror (a composition mirror carrying the depending line AND its
+  # owner line; two factories sharing a tebako line) ACCUMULATE, each
+  # re-derivation indexing every staged stem, never just this run's.
+  shard_paths=("$DEST"/*.manifest.json)
   ruby -rjson -e '
     out = ARGV.shift
     shards = ARGV.map { |p| JSON.parse(File.read(p)) }.sort_by { |s| s["filename"] }
@@ -319,7 +325,7 @@ EOF
     File.binwrite("#{out}.tmp", JSON.pretty_generate(shards) + "\n")
   ' "$DEST/manifest.json" "${shard_paths[@]}" || die "derived manifest.json failed"
   mv "$DEST/manifest.json.tmp" "$DEST/manifest.json"
-  echo "  index: $DEST/manifest.json (derived from $(wc -l < "$SHARDS" | tr -d ' ') shard(s), trimmed to the staged stems) + SHA256SUMS.txt"
+  echo "  index: $DEST/manifest.json (derived from ${#shard_paths[@]} staged shard(s)) + SHA256SUMS.txt"
 else
   # run-artifacts channel: exe + env image + .tfs.sha256 + .abi +
   # .contract.yaml per package. The image rides its SHIPPED sidecar

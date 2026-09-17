@@ -15,6 +15,11 @@
 #
 # Env: TFS, TEBAKO, RUNTIME, RUNTIME_IMAGE (tools/build writes the last
 # two into out/<triplet>/runtime.env), APP (the sample app name).
+# Owner-composed apps (jruby/truffleruby — the runtime-on-runtime
+# composition) additionally take OWNER_EXE / OWNER_IMAGE / OWNER_MOUNT:
+# the press-time check leg yields to the composition smoke, which drives
+# the OWNER's exe with the depending runtime co-mounted (the shim's
+# dispatch plan, spelled by hand).
 set -euo pipefail
 
 IMG="${1:?usage: tools/boot_smoke <image.tfs>}"
@@ -44,9 +49,11 @@ RUNTIME="$(nat "$RUNTIME")"; RUNTIME_IMAGE="$(nat "$RUNTIME_IMAGE")"
 export MSYS2_ARG_CONV_EXCL="*"
 
 case "$APP" in
-  hello-ruby)   ENTRY=/app/hello.rb;   ENGINE=ruby ;;
-  hello-python) ENTRY=/app/hello.py;   ENGINE=python ;;
-  hello-java)   ENTRY=/app/hello.jar;  ENGINE=java ;;
+  hello-ruby)        ENTRY=/app/hello.rb;   ENGINE=ruby ;;
+  hello-python)      ENTRY=/app/hello.py;   ENGINE=python ;;
+  hello-java)        ENTRY=/app/hello.jar;  ENGINE=java ;;
+  hello-jruby)       ENTRY=/app/hello.rb;   ENGINE=jruby ;;
+  hello-truffleruby) ENTRY=/app/hello.rb;   ENGINE=truffleruby ;;
   *) echo "boot_smoke: unknown APP: $APP" >&2; exit 1 ;;
 esac
 
@@ -61,11 +68,34 @@ X="$(mktemp -d)"
 [ -f "$X${ENTRY}" ] || { echo "extracted entrypoint missing: $X$ENTRY"; exit 1; }
 
 echo "== spec 26 payload checks (tebako check, the press-time moment)"
-"$TEBAKO" check "$IMG" --runtime "$RUNTIME" --runtime-image "$RUNTIME_IMAGE"
+if [ -n "${OWNER_EXE:-}" ]; then
+  echo "   skipped — an owner-composed runtime (the runtime-on-runtime
+   composition) runs no single-runtime check: tebako check's grammar is
+   one runtime + one image. The composition smoke below IS the check."
+else
+  "$TEBAKO" check "$IMG" --runtime "$RUNTIME" --runtime-image "$RUNTIME_IMAGE"
+fi
 
 echo "== manual spec-17 dispatch smoke"
-out="$(TEBAKO_RUNTIME_IMAGE="$RUNTIME_IMAGE" \
-  "$RUNTIME" "--tebako-image=$IMG:-:/" "--tebako-entry=$ENTRY")"
+if [ -n "${OWNER_EXE:-}" ]; then
+  # The owner-composed handoff, spelled by hand (the shim's dispatch plan
+  # exactly): the OWNER's exe runs with the OWNER's env image on
+  # TEBAKO_RUNTIME_IMAGE, the DEPENDING runtime's env image co-mounts at
+  # its declared on_runtime mount (flowed from the shard, never
+  # re-authored), the payload mounts at /, the entry resolves against it.
+  # The depending runtime's own exe never runs.
+  OWNER_EXE="$(nat "$OWNER_EXE")"; OWNER_IMAGE="$(nat "$OWNER_IMAGE")"
+  [ -e "$OWNER_EXE" ] || [ ! -e "$OWNER_EXE.exe" ] || OWNER_EXE="$OWNER_EXE.exe"
+  [ -n "${OWNER_MOUNT:-}" ] || { echo "boot_smoke: OWNER_EXE set but OWNER_MOUNT unset"; exit 1; }
+  out="$(TEBAKO_RUNTIME_IMAGE="$OWNER_IMAGE" \
+    "$OWNER_EXE" \
+    "--tebako-image=$RUNTIME_IMAGE:-:$OWNER_MOUNT" \
+    "--tebako-image=$IMG:-:/" \
+    "--tebako-entry=$ENTRY")"
+else
+  out="$(TEBAKO_RUNTIME_IMAGE="$RUNTIME_IMAGE" \
+    "$RUNTIME" "--tebako-image=$IMG:-:/" "--tebako-entry=$ENTRY")"
+fi
 echo "   $out"
 echo "$out" | grep -q "Hello from tebako ($ENGINE" \
   || { echo "boot_smoke: the greeting did not name $ENGINE: $out"; exit 1; }
