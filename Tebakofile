@@ -132,14 +132,6 @@ installers:
   warm: [hello-ruby]
   min_macos: "12.0"
   manufacturer: tebako-packages        # the MSI registry key root / pkg publisher line
-  # Windows-fat press override (tamatebako/tebako#486, open): an
-  # alias-era runtime line makes a self-contained Windows press fail its
-  # boot on a duplicate library-alias declaration (the app image seeds
-  # from the runtime image, manifest included). 0.16.9 is the last
-  # pre-alias line — same ruby 4.0.6, same contract version (2). POSIX
-  # fat legs and every lean leg ride the recipe's line. Drop when #486
-  # ships in a tebako release.
-  fat_windows_runtime_tebako: "0.16.9"
   compositions:
     lean:
       product_name: hello-ruby

@@ -73,6 +73,7 @@ MSI_VERSION="$PKG_VERSION"
 # errors on an undefined variable even inside a false <?if?> (the
 # product's own lesson); the unbound shape binds it empty.
 BOOTSTRAP_BIND=(-d "Bootstrap=")
+EXT_BIND=()
 
 case "$COMPOSITION" in
   lean)
@@ -110,8 +111,11 @@ case "$COMPOSITION" in
     } > "$IN/bootstrap-seed.cmd"
     # WixQuietExec64 lives in the Util extension — pinned to the WiX
     # tool's line (the workflow installs wix 5.0.2; bump in lockstep).
+    # A global add caches the extension; the LINKER still needs -ext to
+    # resolve the CA binary (WIX0094 without it).
     wix extension add --global WixToolset.Util.wixext/5.0.2 >/dev/null
     BOOTSTRAP_BIND=(-d Bootstrap=1)
+    EXT_BIND=(-ext WixToolset.Util.wixext)
     echo "staged: the 4 PATH tools + the bootstrap seed (registry $BOOTSTRAP_REGISTRY — payloads: $BOOTSTRAP_PAYLOADS; warm: ${BOOTSTRAP_WARM:-none})"
     ;;
   fat)
@@ -137,6 +141,7 @@ wix build -arch x64 "$WXS_NATIVE" \
   -d "Manufacturer=$MANUFACTURER" \
   -d "UpgradeCode=$MSI_UPGRADE_CODE" \
   ${BOOTSTRAP_BIND[@]+"${BOOTSTRAP_BIND[@]}"} \
+  ${EXT_BIND[@]+"${EXT_BIND[@]}"} \
   -d "BinDir=$BIN_BINDIR" \
   -o "$OUT/$ASSET"
 echo "built: out/installers/$ASSET (unsigned — the Azure step signs in place when armed)"

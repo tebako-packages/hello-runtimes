@@ -321,6 +321,19 @@ jobs:
     # The Windows MSI container for hello-ruby, one leg per composition
     # (Tebakofile installers:). The environment is the Azure OIDC
     # boundary — the federated credential matches on it.
+    #
+    # The fat leg is GATED OFF (not silent — this comment is the
+    # pointer): a self-contained Windows press against any current
+    # runtime line fails its boot closed on a duplicate library-alias
+    # declaration (the press seeds the app tree from the runtime image,
+    # manifest included, so the env image and the payload image declare
+    # the same aliases — upstream: tamatebako/tebako#486, open). The
+    # documented pin-a-runtime workaround predates the carried-runtime
+    # wire form (the pre-alias lines' drivers cannot parse the
+    # <package>:<slot> env image the v2 bootstrap hands off — verified
+    # in this repo's CI), so no client-side pin exists. The macOS fat
+    # pkg legs rehearse the fat composition; this matrix re-widens the
+    # day #486 ships in a tebako release.
     name: installer msi (${{ matrix.composition }})
     needs: [plan]
     runs-on: windows-2022
@@ -331,7 +344,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        composition: [lean, fat]
+        composition: [lean]
     defaults:
       run:
         shell: bash        # Git Bash; the rehearsal steps use pwsh directly
@@ -412,18 +425,6 @@ jobs:
           # The runtime pair resolves through the CLI's own verified
           # fetch (release-index sha256 + signature checks in-process) —
           # the standard press path; the recipe pins the exact line.
-          # Windows-fat exception (tamatebako/tebako#486, open): a
-          # self-contained press against an alias-era runtime line seeds
-          # the app image with the runtime's manifest, so the env image
-          # and the payload declare the same library aliases and the
-          # driver fails the boot closed. The Tebakofile pins the last
-          # pre-alias line for this one leg (same ruby, same contract
-          # version); POSIX fat legs stay on the recipe line (the alias
-          # union is a windows-only boot pass).
-          FAT_RT_TEBAKO="$RT_TEBAKO"
-          if [ "$HOST_ID" = windows-ucrt64 ] && [ -n "${FAT_RT_TEBAKO_WINDOWS:-}" ]; then
-            FAT_RT_TEBAKO="$FAT_RT_TEBAKO_WINDOWS"
-          fi
           export TEBAKO_HOME; TEBAKO_HOME="$(cygpath -m "$PWD/out/press-home")"
           mkdir -p out/fat
           sign=()
@@ -438,7 +439,7 @@ jobs:
             echo "::notice::no signing key in this context — the rehearsal press carries an unsigned trailer"
           fi
           ./.tools/tebako.exe press -r "$(cygpath -m "$PWD/apps/hello-ruby")" -e hello.rb \
-            -m self-contained -R "$RT_V" --tebako-version "$FAT_RT_TEBAKO" --format limnifs \
+            -m self-contained -R "$RT_V" --tebako-version "$RT_TEBAKO" --format limnifs \
             -o "$(cygpath -m "$PWD/out/fat/hello-ruby")" -p "$(cygpath -m "$PWD/out/press-prefix")" \
             ${sign[@]+"${sign[@]}"}
           fat_exe="$(find out/fat -maxdepth 1 -type f -name 'hello-ruby*' | head -1)"

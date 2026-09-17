@@ -86,7 +86,14 @@ compositions a tebako product can take:
 | Asset | Composition | Contents | Network |
 |---|---|---|---|
 | `hello-ruby-setup-<ver>-windows-ucrt64.msi` · `hello-ruby-setup-<ver>-macos-<arch>.pkg` | lean | the tebako toolset + an install-time seed | at install only: the seed registers this suite's registry, installs `hello-ruby`, and prefetches its runtime, so the first run is already offline-ready (an offline install still completes — re-run `bootstrap-seed` later) |
-| `hello-ruby-fat-setup-<ver>-windows-ucrt64.msi` · `hello-ruby-fat-setup-<ver>-macos-<arch>.pkg` | fat (airgap) | one self-contained `hello-ruby` executable — bootstrap + ruby runtime + the app, stitched | none — not at install, not at run |
+| `hello-ruby-fat-setup-<ver>-macos-<arch>.pkg` | fat (airgap) | one self-contained `hello-ruby` executable — bootstrap + ruby runtime + the app, stitched | none — not at install, not at run |
+
+The fat MSI is gated off for now: a self-contained Windows press against
+any current runtime line fails its boot closed on a duplicate
+library-alias declaration (tamatebako/tebako#486, open — and the
+documented pin-an-older-runtime workaround predates the carried-runtime
+wire form, so no client-side pin exists). The Windows fat leg returns
+the day the fix ships in a tebako release.
 
 The MSI containers are signed with Azure Trusted Signing; the pkg
 containers are signed with a Developer ID Installer certificate,
@@ -108,14 +115,15 @@ Two carries to know about, both tracked upstream:
 - `patches/tebako-wxs-bootstrap-wix5.patch` makes the pinned WiX
   template's web-bootstrapper block compile under the pinned WiX v5
   toolchain (the block is preprocessed out in the product's own
-  pipeline, so the two compile errors surface only for a client binding
+  pipeline, so the compile errors surface only for a client binding
   it — tamatebako/tebako#623). `tools/install_msi` applies it to a
   working copy; the digest-verified template tree is never mutated.
-- The Windows fat press pins the runtime's tebako line to 0.16.9 (same
-  ruby, same contract) until tamatebako/tebako#486 ships: an
-  alias-era runtime line makes a self-contained Windows press fail its
-  boot on a duplicate library-alias declaration. POSIX fat legs and
-  every lean leg run the recipe's runtime line.
+- The Windows fat MSI leg is gated off (its matrix entry carries the
+  pointer) until tamatebako/tebako#486 ships: an alias-era runtime line
+  makes a self-contained Windows press fail its boot on a duplicate
+  library-alias declaration, and no pre-alias runtime line speaks the
+  carried-runtime wire form. The macOS fat pkg legs cover the fat
+  composition.
 
 ## Build your own installer
 
