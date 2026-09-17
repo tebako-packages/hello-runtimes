@@ -1,0 +1,3 @@
+# Patches apply to digest-verified upstream bytes (LF) — a CRLF
+# conversion on a Windows checkout breaks git apply's context match.
+patches/*.patch text eol=lf
