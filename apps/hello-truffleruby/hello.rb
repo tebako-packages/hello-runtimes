@@ -6,4 +6,4 @@
 # implementation's own line (pure-language law), pinned to the
 # truffleruby implementation — the wrapper composes it onto the graalvm
 # owner at dispatch (runtime-on-runtime).
-puts "Hello from tebako (truffleruby #{TruffleRuby::VERSION}, ruby #{RUBY_VERSION} compat, #{RUBY_PLATFORM})"
+puts "Hello from tebako (#{RUBY_ENGINE} #{RUBY_ENGINE_VERSION}, ruby #{RUBY_VERSION} compat, #{RUBY_PLATFORM})"
