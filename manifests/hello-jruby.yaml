@@ -1,0 +1,50 @@
+schema_version: 1
+# Payload manifest for hello-jruby (filled by tools/build).
+identity:
+  schema_version: 1
+  kind: app
+  name: "hello-jruby"
+  version: "@@VERSION@@"
+  producer: {tool: feedstock-build, tool_version: "1"}
+  created: "@@CREATED@@"                      # pinned at release time
+  source:
+    commit: "@@FEEDSTOCK_SHA@@"
+    builder: "@@BUILDER@@"                    # "gha:run:<id>" on CI builds
+  digest:
+    tree_hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"  # placeholder until the CAS lands
+    blob_sha256: "@@BLOB_SHA256@@"
+  signing: {state: unsigned}
+  encryption: {state: none}
+  annotations: {sample: hello-runtimes, runtime: jruby}
+provides:
+  entrypoints:
+    - name: hello-jruby
+      path: /app/hello.rb
+      args_default: []
+      runtime_requirement:
+        # Pure-language payload (stdlib only): a version RANGE on the
+        # implementation's own line — an implementation-narrowed edge
+        # matches the runtime's own version (jruby 10.1.1.0), never an
+        # abi line (no native extensions here). The implementation pin
+        # keeps the sample deterministic: a bare `engine: ruby` edge
+        # resolves to the newest ruby line across EVERY implementation
+        # the registries offer.
+        engine: ruby
+        implementation: jruby
+        constraint: ">= 10, < 11"
+  platforms: []                   # filled by tools/build from the leg's
+                                  # triplet (the template stays parseable)
+  capabilities: {exec: true, read: true}
+requires:
+  # The provider's kind: language edge — the press cross-check mirrors
+  # the consumer lock's nested runtime row against this edge.
+  - kind: language
+    engine: ruby
+    implementation: jruby
+    constraint: ">= 10, < 11"
+checks:
+  run:
+    entry: /app/hello.rb
+    argv: []
+    expect: {exit: 0}
+    timeout: 120

@@ -85,7 +85,17 @@ when "--env"
   ]).each { |k, v| puts "#{k}=#{v}" }
 when "--runtimes"
   spec = RECIPE.fetch("apps").fetch(ARGV[1])
-  spec.fetch("runtimes").each { |rt| puts "#{rt.fetch("version")} #{rt.fetch("tebako")} #{rt.fetch("release")}" }
+  # "<version> <tebako> <release>" per line; a runtime line carrying an
+  # `owner` facet (the runtime-on-runtime composition — jruby/truffleruby
+  # on openjdk) appends "<owner_factory> <owner_version> <owner_tebako>
+  # <owner_release>" so the leg stages the owner line beside it.
+  spec.fetch("runtimes").each do |rt|
+    fields = [rt.fetch("version"), rt.fetch("tebako"), rt.fetch("release")]
+    if (owner = rt["owner"])
+      fields += [owner.fetch("factory"), owner.fetch("version"), owner.fetch("tebako"), owner.fetch("release")]
+    end
+    puts fields.join(" ")
+  end
 when "--payload-args"
   # tebako publish's grammar is --payload <triplet>=<path> (identity rides
   # --name + the manifest); one pair per leg of the named app.

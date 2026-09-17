@@ -309,9 +309,11 @@ EOF
   # The trimmed monolith, derived consumer-side: each shard IS its
   # manifest entry; deterministic order by filename. A partial mirror
   # never advertises bytes it does not carry — the derived index spans
-  # exactly the staged stems.
-  shard_paths=()
-  while IFS= read -r s; do shard_paths+=("$REL_DL/$s"); done < "$SHARDS"
+  # exactly the shards STAGED IN $DEST: repeated invocations into one
+  # mirror (a composition mirror carrying the depending line AND its
+  # owner line; two factories sharing a tebako line) ACCUMULATE, each
+  # re-derivation indexing every staged stem, never just this run's.
+  shard_paths=("$DEST"/*.manifest.json)
   ruby -rjson -e '
     out = ARGV.shift
     shards = ARGV.map { |p| JSON.parse(File.read(p)) }.sort_by { |s| s["filename"] }
@@ -319,7 +321,7 @@ EOF
     File.binwrite("#{out}.tmp", JSON.pretty_generate(shards) + "\n")
   ' "$DEST/manifest.json" "${shard_paths[@]}" || die "derived manifest.json failed"
   mv "$DEST/manifest.json.tmp" "$DEST/manifest.json"
-  echo "  index: $DEST/manifest.json (derived from $(wc -l < "$SHARDS" | tr -d ' ') shard(s), trimmed to the staged stems) + SHA256SUMS.txt"
+  echo "  index: $DEST/manifest.json (derived from ${#shard_paths[@]} staged shard(s)) + SHA256SUMS.txt"
 else
   # run-artifacts channel: exe + env image + .tfs.sha256 + .abi +
   # .contract.yaml per package. The image rides its SHIPPED sidecar

@@ -1,15 +1,17 @@
 # hello-runtimes — one hello-world app per tebako runtime
 
 The sample suite and client-product reference for the tebako v2
-ecosystem: three minimal app payloads, each riding its own runtime,
-built and smoked on every platform, then signed and published as both
-payload images and OS-native installers.
+ecosystem: minimal app payloads, each riding its own runtime, built and
+smoked on every platform the runtime ships, then signed and published as
+both payload images and OS-native installers.
 
 | Payload | Rides | Runtime edge | Platforms |
 |---|---|---|---|
 | `hello-ruby` | tebako-runtime-ruby | `>= 3.3, < 5.0` (range — pure-language) | linux-gnu ×2, macOS ×2, windows-ucrt |
 | `hello-python` | tebako-runtime-python | `>= 3.13, < 4.0` | linux-gnu ×2, macOS ×2 (windows waits on the factory's mount tier) |
 | `hello-java` | tebako-runtime-openjdk | `>= 21`, flavor-pinned to `temurin` | linux-gnu x86_64, macOS arm64, windows-ucrt (the factory's three) |
+| `hello-jruby` | tebako-runtime-jruby | `>= 10, < 11`, implementation-pinned to `jruby` | linux-gnu x86_64, macOS arm64 (the factory's two) |
+| `hello-truffleruby` | tebako-runtime-truffleruby | `>= 34, < 35`, implementation-pinned to `truffleruby` | linux-gnu x86_64, macOS arm64 (jvm mode) |
 
 ## Why this suite exists
 
@@ -40,7 +42,17 @@ dispatch path, or a signing surface regressed.
 - **Shard-model runtime staging.** `tools/stage_runtime` consumes the
   factories' per-leg shard releases (manifest shards + per-asset
   sidecars + `.asc`), verifies every staged byte three ways, and derives
-  the trimmed mirror index consumer-side.
+  the trimmed mirror index consumer-side. Repeated stagings into one
+  mirror ACCUMULATE — the derived index spans every shard the mirror
+  carries, so a composition mirror (a depending line + its owner line)
+  builds naturally.
+- **Runtime-on-runtime composition.** `hello-jruby` and
+  `hello-truffleruby` ride wrappers that compose onto the openjdk owner
+  at dispatch: the owner's exe runs, the depending runtime's env image
+  co-mounts at its declared `/__runners__/<name>` point, and the payload
+  mounts at `/`. The legs stage both lines into one mirror and smoke the
+  full handoff — the owner's interpreter, the depending runtime's
+  template, the app's greeting.
 - **Signed publish.** On a tag, the publish job signs every payload with
   the tamatebako CI signing subkey and lands the registry by bot PR
   (main is protected).
