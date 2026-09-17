@@ -13,6 +13,11 @@
 #   --runtimes APP        "<version> <tebako> <release>" per line (the
 #                         leg's stage+smoke loop)
 #   --payload-args        the publish step's --payload pairs
+#   --installer-env C     the installer leg's env for composition C
+#                         (lean|fat); the tool pins ride the ordinary
+#                         --env call beside it
+#   --installer-sources   the installer template fetch list:
+#                         "<repo>\t<ref>\t<path>\t<sha256>" per line
 #
 # Tebakofile is the SSOT; this tool carries no version literals.
 
@@ -67,8 +72,25 @@ def tool_env(triplet)
     # The publish verify installs the payload — the dispatcher binary
     # must sit beside the CLI (shims point at it).
     "SHIM_ASSET" => "tebako-shim-#{ver}-#{host}#{suffix}",
-    "SHIM_SHA256" => dig.fetch("shim")
+    "SHIM_SHA256" => dig.fetch("shim"),
+    # tebako-pkg: the trailer-surgery CLI — the installer containers join
+    # the signed part set with it (detached .asc per asset), and the lean
+    # MSI/pkg stage it as one of the four PATH tools.
+    "TPKG_ASSET" => "tebako-pkg-#{ver}-#{host}#{suffix}",
+    "TPKG_SHA256" => dig.fetch("pkg")
   }
+end
+
+# The installers block's ref aliases resolve here — never a second
+# hand-written copy of a tag the recipe already pins (SSOT).
+def installer_source_ref(src)
+  case src.fetch("ref")
+  when "tools" then RECIPE.fetch("tools").fetch("release")
+  when "runtime"
+    RECIPE.fetch("apps").fetch(RECIPE.fetch("installers").fetch("app"))
+      .fetch("runtimes").first.fetch("release")
+  else src.fetch("ref")
+  end
 end
 
 case ARGV[0]
@@ -103,6 +125,44 @@ when "--payload-args"
   legs.select { |l| l["app"] == app }.map do |l|
     "--payload #{l["triplet"]}=out/#{l["triplet"]}/#{app}-#{RECIPE.fetch("version")}-#{l["host_id"]}.tfs"
   end.each { |a| puts a }
+when "--installer-env"
+  # The installer leg's env (KEY=value lines for GITHUB_ENV), one
+  # composition at a time. The tool-asset pins come from the ordinary
+  # --env call beside it (hello-ruby × the leg's triplet).
+  comp = ARGV[1] or abort "usage: ruby tools/pins.rb --installer-env lean|fat"
+  inst = RECIPE.fetch("installers")
+  c = inst.fetch("compositions").fetch(comp)
+  app = inst.fetch("app")
+  rt = RECIPE.fetch("apps").fetch(app).fetch("runtimes").first or
+    abort("pins: installers.app #{app} lists no runtime lines (the fat press rides the first)")
+  warm = inst.fetch("warm")
+  unless warm.all? { |w| w == app }
+    abort("pins: installers.warm #{warm.inspect} must stay a subset of the payload set (#{app})")
+  end
+  [
+    ["COMPOSITION", comp],
+    ["INSTALL_APP", app],
+    ["PRODUCT_NAME", c.fetch("product_name")],
+    ["ORG_ID", c.fetch("org_id")],
+    ["MANUFACTURER", inst.fetch("manufacturer")],
+    ["INSTALL_ROOT", c.fetch("install_root")],
+    ["MSI_UPGRADE_CODE", c.fetch("msi_upgrade_code")],
+    ["MIN_MACOS", inst.fetch("min_macos")],
+    ["BOOTSTRAP_REGISTRY", inst.fetch("registry")],
+    ["BOOTSTRAP_PAYLOADS", app],
+    ["BOOTSTRAP_WARM", warm.join(" ")],
+    # The fat composition presses against the app's FIRST runtime line.
+    ["RT_V", rt.fetch("version")],
+    ["RT_TEBAKO", rt.fetch("tebako")]
+  ].each { |k, v| puts "#{k}=#{v}" }
+when "--installer-sources"
+  # "<repo>\t<resolved ref>\t<path>\t<sha256>" per line — the fetcher's
+  # work list (tools/fetch_installer_sources).
+  RECIPE.fetch("installers").fetch("sources").each do |src|
+    repo = src.fetch("repo")
+    ref = installer_source_ref(src)
+    src.fetch("files").each { |path, sha| puts [repo, ref, path, sha].join("\t") }
+  end
 else
-  abort "usage: ruby tools/pins.rb [--matrix | --env APP TRIPLET | --runtimes APP | --payload-args APP]"
+  abort "usage: ruby tools/pins.rb [--matrix | --env APP TRIPLET | --runtimes APP | --payload-args APP | --installer-env lean|fat | --installer-sources]"
 end

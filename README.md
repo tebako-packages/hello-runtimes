@@ -66,9 +66,13 @@ dispatch path, or a signing surface regressed.
   against the release's own SHA256SUMS), per-app runtime lines,
   platforms, CI hosts, signing keyid.
 - `tools/` — `pins.rb` (recipe → CI matrix/env/payload-args) /
-  `stage_runtime` / `build` / `boot_smoke`.
+  `stage_runtime` / `build` / `boot_smoke` / `registry_default` / the
+  installer tools (`fetch_installer_sources`, `install_msi`,
+  `install_pkg`).
 - `.github/workflows/build-payloads.yml` — plan → per-(app × platform)
-  legs (build + smoke against every runtime line) → the publish job
+  legs (build + smoke against every runtime line) + the installer legs
+  (MSI and pkg, lean and fat compositions — build + install-rehearse on
+  every trigger, sign + ship on the publish run) → the publish job
   (gated: owner dispatch with `publish: true` on a tag ref — NEVER
   automatic).
 - `tpkg-registry.yaml` — this suite's registry, published at the
@@ -76,11 +80,71 @@ dispatch path, or a signing surface regressed.
 
 ## Installers
 
-The installer legs (MSI + pkg, fat and lean shapes) consume the product
-repo's parameterized templates (`templates/installers/` in
-tamatebako/tebako) with this org's own identity — the same files a
-client CI binds with *its* identity. They land in this repo's workflow
-as the signing credentials arrive (see the repo's open tracking issue).
+Every release also ships OS-native installers for `hello-ruby`, in both
+compositions a tebako product can take:
+
+| Asset | Composition | Contents | Network |
+|---|---|---|---|
+| `hello-ruby-setup-<ver>-windows-ucrt64.msi` · `hello-ruby-setup-<ver>-macos-<arch>.pkg` | lean | the tebako toolset + an install-time seed | at install only: the seed registers this suite's registry, installs `hello-ruby`, and prefetches its runtime, so the first run is already offline-ready (an offline install still completes — re-run `bootstrap-seed` later) |
+| `hello-ruby-fat-setup-<ver>-windows-ucrt64.msi` · `hello-ruby-fat-setup-<ver>-macos-<arch>.pkg` | fat (airgap) | one self-contained `hello-ruby` executable — bootstrap + ruby runtime + the app, stitched | none — not at install, not at run |
+
+The MSI containers are signed with Azure Trusted Signing; the pkg
+containers are signed with a Developer ID Installer certificate,
+notarized, and stapled. The binaries inside carry their own signatures
+(the tebako release's own for the lean toolset; this org's Developer ID
+Application certificate for the fat exe), and every container ships with
+the suite's OpenPGP `.asc` beside it.
+
+The installers bind the product repo's parameterized templates
+(`templates/installers/` in tamatebako/tebako), fetched at the pinned
+tebako release tag and digest-verified file by file — the same files a
+client CI binds with *its* identity. The legs build and install-rehearse
+both compositions on every PR and push; the containers ship signed
+exactly on the owner-dispatched publish run (a disarmed signing plane
+rehearses unsigned and ships nothing).
+
+## Build your own installer
+
+The same pipeline is the client recipe — everything varies through the
+`installers:` block of the Tebakofile and your own signing credentials:
+
+1. **Bind your identity.** Copy the `installers:` block and set
+   `product_name`, `org_id` (your reverse-DNS prefix, e.g.
+   `org.example`), `manufacturer`, and `install_root`. **Mint your own
+   MSI `msi_upgrade_code` GUID and lock it forever** — upgrades pair on
+   it, and reusing another product's GUID makes the two products
+   upgrade-collide on the same machine.
+2. **Point at your payload.** `app:` names the suite app to wrap (the
+   fat composition presses it self-contained against the app's first
+   listed runtime line); `registry:` is the registry your lean seed
+   registers; `warm:` lists the shims dispatched once at install time
+   (the runtime prefetch — print-and-exit entrypoints only).
+3. **Keep the pins.** The template files come from your pinned tebako
+   release tag (`tools.release`), digest-verified by
+   `tools/fetch_installer_sources` — bump the digests when you bump the
+   toolchain. Never vendor-edit the templates: bind them.
+4. **Provision your signing.** Windows: an Azure Trusted Signing
+   account + certificate profile, and an Entra app registration whose
+   federated credential matches your repo's `windows-signing`
+   environment; repo secrets `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` /
+   `AZURE_SUBSCRIPTION_ID`, repo variables `AZURE_ENDPOINT` /
+   `AZURE_SIGNING_ACCOUNT_NAME` / `AZURE_SIGNING_CERT_PROFILE`, and the
+   gate variable `WINDOWS_SIGNING_ENABLED=true`. macOS: **two distinct
+   certificates** — Developer ID Application (the fat exe inside) and
+   Developer ID Installer (the pkg container; the Application
+   certificate cannot productsign) — plus an App Store Connect API key;
+   secrets `APPLE_DEVELOPER_ID_P12(+_PASSWORD)`,
+   `APPLE_DEVELOPER_ID_INSTALLER_P12(+_PASSWORD)`, `APPLE_ASC_KEY_P8` /
+   `APPLE_ASC_KEY_ID` / `APPLE_ASC_ISSUER_ID`, `APPLE_TEAM_ID`, and the
+   gate variables `APPLE_SIGNING_ENABLED=true` +
+   `APPLE_INSTALLER_SIGNING_ENABLED=true`. Payload/container `.asc`:
+   your OpenPGP signing key as `TEBAKO_CI_SIGNING_KEY`, with the
+   registry pinning the primary keyid (`signing:` in the Tebakofile).
+5. **Fail-closed by construction.** A gate variable set to `true` with a
+   secret absent fails the leg with a named error — a signed release
+   never silently ships unsigned. Gates off: the legs still build and
+   install-rehearse both containers on every run, and the release simply
+   carries no installer assets.
 
 ## Try a published payload
 

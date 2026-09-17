@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# tools/fetch_installer_sources — fetch the pinned installer source set
+# into .install-src/, digest-verified file by file against the
+# Tebakofile's installers.sources pins (the trust-anchor pattern, same as
+# the tool pins: a drifted byte is a pin mismatch, named).
+#
+# The set (Tebakofile is the SSOT; no literals here):
+#   - the product repo's parameterized installer templates (the case-B
+#     consumption: the SAME files the tebako release pipeline binds,
+#     never forked) + its fail-closed signing gate scripts;
+#   - the fat exe's codesign profile, flowed from the ruby runtime
+#     factory at the pinned runtime release.
+#
+# Ref aliases (tools / runtime) are resolved by tools/pins.rb.
+set -euo pipefail
+
+FEEDSTOCK="$(cd "$(dirname "$0")/.." && pwd)"
+DEST="${INSTALL_SRC:-$FEEDSTOCK/.install-src}"
+mkdir -p "$DEST"
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+  else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
+
+while IFS=$'\t' read -r repo ref path sha; do
+  out="$DEST/$path"
+  mkdir -p "$(dirname "$out")"
+  # -fsSL + retries: a transient flake fails loudly, never a silent error
+  # page the sha pin then rejects.
+  curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
+    "https://raw.githubusercontent.com/$repo/$ref/$path" -o "$out" \
+    || { echo "fetch_installer_sources: download failed: $repo@$ref $path" >&2; exit 1; }
+  got="$(sha256_file "$out")"
+  [ "$got" = "$sha" ] || {
+    echo "fetch_installer_sources: PIN MISMATCH $path: got $got want $sha ($repo@$ref)" >&2
+    exit 1
+  }
+  case "$path" in *.sh | *postinstall) chmod +x "$out" ;; esac
+  echo "  $path — sha256 verified ($repo@$ref)"
+done < <(ruby "$FEEDSTOCK/tools/pins.rb" --installer-sources)

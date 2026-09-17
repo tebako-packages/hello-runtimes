@@ -1,0 +1,278 @@
+#!/usr/bin/env bash
+# tools/install_pkg — build (+ sign + notarize + rehearse) the macOS pkg
+# container for ONE composition of the sample app, binding the pinned
+# templates (.install-src/templates/installers/macos/ — fetched and
+# digest-verified by tools/fetch_installer_sources) with THIS org's
+# identity.
+#
+# pkgbuild (component) → productbuild (distribution) → [armed]
+# productsign (Developer ID **Installer** — NOT the Application cert) →
+# notarize → STAPLE → install rehearsal (always). Signing is in-script
+# before any hash/ship step — the sign-then-hash law holds by
+# construction.
+#
+# Compositions (Tebakofile installers: block):
+#   lean  the four PATH tools + the install-time seed (registers the
+#         suite registry, installs the payload, warms its runtime into
+#         the machine home — the install-time prefetch; network at
+#         install). The rehearsal asserts the seed's effects, so a broken
+#         seed fails the leg, never a user machine.
+#   fat   the self-contained pressed exe alone (carries the runtime pair
+#         — zero network at install or run). The pressed exe is UNSIGNED
+#         by construction (appended slots invalidate any prior
+#         signature), so an armed pipeline codesigns it HERE, post-press
+#         and pre-wrap, with the Developer ID **Application** identity +
+#         the runtime factory's signing profile (fetched pinned), then
+#         the notarized pkg covers it.
+#
+# Required env: COMPOSITION (lean|fat), PRODUCT_NAME, ORG_ID,
+# INSTALL_ROOT, MIN_MACOS, PKG_VERSION, HOST_ID (macos-arm64 |
+# macos-x86_64), INSTALL_APP; lean also BOOTSTRAP_REGISTRY /
+# BOOTSTRAP_PAYLOADS / BOOTSTRAP_WARM; fat also FAT_EXE, ENTITLEMENTS.
+# Gate env (the workflow's setup steps): APPLE_INSTALLER_SIGNING_ENABLED
+# + INSTALLER_SIGN_HASH + INSTALLER_KEYCHAIN (the pkg container);
+# APPLE_SIGNING_ENABLED + CODESIGN_HASH + CODESIGN_KEYCHAIN +
+# APPLE_TEAM_ID (the fat exe inside); notary: APPLE_ASC_KEY_P8 /
+# APPLE_ASC_KEY_ID / APPLE_ASC_ISSUER_ID.
+set -euo pipefail
+
+FEEDSTOCK="$(cd "$(dirname "$0")/.." && pwd)"
+die() { echo "install_pkg: $*" >&2; exit 1; }
+step() { printf '\n== %s\n' "$*"; }
+
+COMPOSITION="${COMPOSITION:?install_pkg: COMPOSITION unset (lean|fat)}"
+PRODUCT_NAME="${PRODUCT_NAME:?install_pkg: PRODUCT_NAME unset (pins.rb --installer-env)}"
+ORG_ID="${ORG_ID:?install_pkg: ORG_ID unset}"
+INSTALL_ROOT="${INSTALL_ROOT:?install_pkg: INSTALL_ROOT unset}"
+MIN_MACOS="${MIN_MACOS:?install_pkg: MIN_MACOS unset}"
+PKG_VERSION="${PKG_VERSION:?install_pkg: PKG_VERSION unset}"
+HOST_ID="${HOST_ID:?install_pkg: HOST_ID unset}"
+INSTALL_APP="${INSTALL_APP:?install_pkg: INSTALL_APP unset}"
+case "$COMPOSITION" in lean | fat) ;; *) die "unknown COMPOSITION: $COMPOSITION" ;; esac
+
+SRC="$FEEDSTOCK/.install-src"
+TOOLS_DIR="$FEEDSTOCK/.tools"
+[ -f "$SRC/templates/installers/macos/distribution.xml" ] || die "templates not staged (run tools/fetch_installer_sources first)"
+
+# pkgbuild/productbuild versions are numeric triplets (the suite version
+# is one by construction; keep the guard for rehearsals on odd refs).
+PKGV="$PKG_VERSION"
+[[ "$PKGV" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || PKGV="0.0.0"
+ASSET="$PRODUCT_NAME-setup-$PKG_VERSION-$HOST_ID.pkg"
+
+ARMED="${APPLE_INSTALLER_SIGNING_ENABLED:-false}"
+if [ "$ARMED" = "true" ]; then
+  : "${INSTALLER_SIGN_HASH:?install_pkg: the installer signing gate did not export INSTALLER_SIGN_HASH}"
+  : "${INSTALLER_KEYCHAIN:?install_pkg: the installer signing gate did not export INSTALLER_KEYCHAIN}"
+  : "${APPLE_ASC_KEY_P8:?install_pkg: armed but APPLE_ASC_KEY_P8 unset}"
+  : "${APPLE_ASC_KEY_ID:?install_pkg: armed but APPLE_ASC_KEY_ID unset}"
+  : "${APPLE_ASC_ISSUER_ID:?install_pkg: armed but APPLE_ASC_ISSUER_ID unset}"
+fi
+
+# ---- 1. stage the payload root -----------------------------------------
+step "stage the $COMPOSITION payload root"
+cd "$FEEDSTOCK"
+rm -rf pkg-root build
+mkdir -p "pkg-root$INSTALL_ROOT/bin" build/scripts out/installers
+case "$COMPOSITION" in
+  lean)
+    for tool in tebako tebako-shim tfs tebako-pkg; do
+      [ -f "$TOOLS_DIR/$tool" ] || die "$tool not staged in $TOOLS_DIR"
+      cp "$TOOLS_DIR/$tool" "pkg-root$INSTALL_ROOT/bin/$tool"
+      chmod 755 "pkg-root$INSTALL_ROOT/bin/$tool"
+    done
+    echo "staged the 4 PATH tools"
+    ;;
+  fat)
+    : "${FAT_EXE:?install_pkg: FAT_EXE unset (the pressed self-contained exe)}"
+    [ -f "$FAT_EXE" ] || die "FAT_EXE not found: $FAT_EXE"
+    cp "$FAT_EXE" "pkg-root$INSTALL_ROOT/bin/$INSTALL_APP"
+    chmod 755 "pkg-root$INSTALL_ROOT/bin/$INSTALL_APP"
+    echo "staged the self-contained $INSTALL_APP ($(stat -f %z "pkg-root$INSTALL_ROOT/bin/$INSTALL_APP") bytes — runtime pair carried as slots)"
+    # Post-press codesign (the press emits unsigned bytes by design —
+    # appended slots invalidate any prior CodeDirectory): the publisher's
+    # Developer ID **Application** identity + the runtime factory's
+    # pinned signing profile. Armed only; a disarmed rehearsal ships
+    # nothing regardless (containers ship signed-only).
+    if [ "${APPLE_SIGNING_ENABLED:-false}" = "true" ]; then
+      : "${CODESIGN_HASH:?install_pkg: the application signing gate did not export CODESIGN_HASH}"
+      : "${CODESIGN_KEYCHAIN:?install_pkg: the application signing gate did not export CODESIGN_KEYCHAIN}"
+      : "${APPLE_TEAM_ID:?install_pkg: APPLE_TEAM_ID unset}"
+      : "${ENTITLEMENTS:?install_pkg: ENTITLEMENTS unset (the flowed runtime signing profile)}"
+      codesign --force --options runtime --timestamp --keychain "$CODESIGN_KEYCHAIN" \
+        --entitlements "$ENTITLEMENTS" --sign "$CODESIGN_HASH" "pkg-root$INSTALL_ROOT/bin/$INSTALL_APP"
+      codesign --verify --strict --verbose=1 "pkg-root$INSTALL_ROOT/bin/$INSTALL_APP"
+      codesign -dvv "pkg-root$INSTALL_ROOT/bin/$INSTALL_APP" 2>&1 | grep -q "TeamIdentifier=$APPLE_TEAM_ID" \
+        || die "TeamIdentifier is not $APPLE_TEAM_ID — signed by an unexpected identity"
+      # macOS 15 emits the embedded plist single-line — count <true/>
+      # values, never key lines (the factory's own check idiom).
+      codesign -d --entitlements :- "pkg-root$INSTALL_ROOT/bin/$INSTALL_APP" > build/embedded.xml 2>/dev/null || true
+      TRUES="$(grep -o '<true/>' build/embedded.xml | wc -l | tr -d ' ')"
+      [ "$TRUES" = "2" ] || { cat build/embedded.xml; die "entitlement pair not embedded (got $TRUES <true/>)"; }
+      echo "fat exe signed: Developer ID Application ${CODESIGN_HASH:0:10}… + the entitlement pair"
+    else
+      echo "::notice::APPLE_SIGNING_ENABLED != true — the fat exe inside stays UNSIGNED; the container ships never-unarmed regardless"
+    fi
+    ;;
+esac
+
+# ---- 2. render the template tokens (productbuild has no binds) ---------
+step "render the templates"
+sed -e "s/@PRODUCT_NAME@/$PRODUCT_NAME/g" -e "s/@VERSION@/$PKGV/g" \
+    -e "s/@ORG_ID@/$ORG_ID/g" -e "s/@MIN_MACOS@/$MIN_MACOS/g" \
+    "$SRC/templates/installers/macos/distribution.xml" > build/distribution.xml
+sed -e "s/@PRODUCT_NAME@/$PRODUCT_NAME/g" -e "s|@INSTALL_ROOT@|$INSTALL_ROOT|g" \
+    "$SRC/templates/installers/macos/scripts/postinstall" > build/scripts/postinstall
+if [ "$COMPOSITION" = lean ]; then
+  : "${BOOTSTRAP_REGISTRY:?install_pkg: BOOTSTRAP_REGISTRY unset (the lean composition seeds from it)}"
+  : "${BOOTSTRAP_PAYLOADS:?install_pkg: BOOTSTRAP_PAYLOADS unset}"
+  # The install-time seed (the template's web-bootstrapper contract):
+  # self-locating, idempotent, user-re-runnable; the postinstall runs it
+  # best-effort (a failed seed — an offline machine — never fails the
+  # install; the user re-runs it later). The warm loop dispatches each
+  # named shim once so its RUNTIME lands in the machine home at install
+  # time (the install-time prefetch — after a warm, a user's first
+  # dispatch is read-only against the root-owned home).
+  {
+    echo '#!/bin/bash'
+    echo "# $PRODUCT_NAME bootstrap seed — composed at build time; safe to re-run (tebako install is idempotent)."
+    echo 'set -u'
+    echo 'ROOT="$(cd "$(dirname "$0")" && pwd)"'
+    echo 'export TEBAKO_HOME="$ROOT/home"'
+    echo 'mkdir -p "$TEBAKO_HOME/shims"'
+    echo "echo \"seeding the $PRODUCT_NAME payload set into \$TEBAKO_HOME (network required)…\""
+    echo "\"\$ROOT/bin/tebako\" add-registry \"$BOOTSTRAP_REGISTRY\""
+    for p in $BOOTSTRAP_PAYLOADS; do
+      echo "\"\$ROOT/bin/tebako\" install \"$p\""
+    done
+    for w in ${BOOTSTRAP_WARM:-}; do
+      case " $BOOTSTRAP_PAYLOADS " in
+        *" $w "*) ;;
+        *) die "BOOTSTRAP_WARM entry $w is not in BOOTSTRAP_PAYLOADS — warm is a subset" ;;
+      esac
+      echo "\"\$ROOT/home/shims/$w\" || echo \"warning: warm dispatch of $w failed (offline?) — the first user run downloads its runtime\" >&2"
+    done
+  } > "pkg-root$INSTALL_ROOT/bootstrap-seed.sh"
+  chmod 755 "pkg-root$INSTALL_ROOT/bootstrap-seed.sh"
+  mkdir -p "pkg-root$INSTALL_ROOT/home/shims"
+  cat > build/bootstrap-hook <<EOF
+
+# --- install-time seed: best-effort — a failed seed (an offline machine)
+# never fails the install; the user re-runs it later.
+printf '%s\n' "$INSTALL_ROOT/home/shims" >> "/etc/paths.d/$PRODUCT_NAME"
+"$INSTALL_ROOT/bootstrap-seed.sh" || echo "warning: the $PRODUCT_NAME payload seed failed (offline?) — re-run later: $INSTALL_ROOT/bootstrap-seed.sh" >&2
+EOF
+  echo "bootstrap seed staged: registry $BOOTSTRAP_REGISTRY — payloads: $BOOTSTRAP_PAYLOADS; warm: ${BOOTSTRAP_WARM:-none}"
+else
+  : > build/bootstrap-hook
+fi
+sed -e "/@BOOTSTRAP_HOOK@/r build/bootstrap-hook" -e "/@BOOTSTRAP_HOOK@/d" \
+    build/scripts/postinstall > build/scripts/postinstall.rendered
+mv build/scripts/postinstall.rendered build/scripts/postinstall
+# The splice recreates the file (umask 644) — the exec bit goes LAST, on
+# the file that actually ships.
+chmod +x build/scripts/postinstall
+if grep -qE '@(PRODUCT_NAME|VERSION|ORG_ID|MIN_MACOS|INSTALL_ROOT|BOOTSTRAP_HOOK)@' build/distribution.xml build/scripts/postinstall; then
+  die "unrendered template token left in the pkg inputs — the template drifted from this tool"
+fi
+
+# ---- 3. pkgbuild → productbuild ------------------------------------------
+# --root is pkg-root, not pkg-root$INSTALL_ROOT: the payload must KEEP
+# its opt/<name>/bin prefix under --install-location / (the product's
+# v2.8.0 lesson).
+step "pkgbuild + productbuild"
+pkgbuild --root pkg-root --install-location / \
+  --identifier "$ORG_ID.$PRODUCT_NAME.pkg" --version "$PKGV" \
+  --scripts build/scripts \
+  "build/$PRODUCT_NAME-component.pkg"
+productbuild --distribution build/distribution.xml \
+  --package-path build "$FEEDSTOCK/out/installers/$ASSET"
+
+# ---- 4. sign + notarize + staple (the armed path) ------------------------
+if [ "$ARMED" = "true" ]; then
+  step "productsign (Developer ID Installer) + notarize + staple"
+  mv "$FEEDSTOCK/out/installers/$ASSET" "build/$ASSET.unsigned"
+  productsign --keychain "$INSTALLER_KEYCHAIN" --sign "$INSTALLER_SIGN_HASH" \
+    "build/$ASSET.unsigned" "$FEEDSTOCK/out/installers/$ASSET"
+  pkgutil --check-signature "$FEEDSTOCK/out/installers/$ASSET" | tee build/pkg-sig.txt
+  grep -q "Developer ID Installer" build/pkg-sig.txt \
+    || die "pkg not signed by a Developer ID Installer identity"
+  grep -q 'Status: signed' build/pkg-sig.txt || die "pkgutil reports the pkg unsigned"
+
+  work="$(mktemp -d "${RUNNER_TEMP:-/tmp}/pkg-notarize.XXXXXX")"
+  printf '%s' "$APPLE_ASC_KEY_P8" > "$work/AuthKey.p8"
+  xcrun notarytool submit "$FEEDSTOCK/out/installers/$ASSET" --key "$work/AuthKey.p8" \
+    --key-id "$APPLE_ASC_KEY_ID" --issuer "$APPLE_ASC_ISSUER_ID" \
+    --wait --timeout 20m | tee "$work/notary.txt"
+  grep -q 'status: Accepted' "$work/notary.txt" || {
+    xcrun notarytool log "$(grep -m1 -oE '[0-9a-f-]{36}' "$work/notary.txt")" \
+      --key "$work/AuthKey.p8" --key-id "$APPLE_ASC_KEY_ID" --issuer "$APPLE_ASC_ISSUER_ID" 2>&1 | tail -20
+    die "notarytool did not Accept the pkg"
+  }
+  # staple fetches the online ticket — Accepted≠visible is a race (the
+  # product's own lesson): bounded poll, then a named failure.
+  staple_deadline=$(( $(date +%s) + 300 ))
+  until xcrun stapler staple "$FEEDSTOCK/out/installers/$ASSET"; do
+    [ "$(date +%s)" -lt "$staple_deadline" ] || die "stapler could not fetch the ticket for $ASSET within 300s"
+    echo "ticket not yet fetchable for $ASSET — polling again in 10 s"
+    sleep 10
+  done
+  xcrun stapler validate "$FEEDSTOCK/out/installers/$ASSET"
+  # The pkg's assessment IS the right spctl gate: notarized + stapled
+  # must Assess accepted, source=Notarized Developer ID (spctl prints its
+  # verdict on STDERR — 2>&1 or the tee captures nothing).
+  spctl --assess -t install -v "$FEEDSTOCK/out/installers/$ASSET" 2>&1 | tee build/spctl.txt
+  grep -q "accepted" build/spctl.txt || die "spctl rejected the notarized pkg"
+  echo "signed + notarized + STAPLED: $ASSET"
+else
+  echo "::notice::the installer signing gate is disarmed — the pkg is UNSIGNED and ships never (containers ship signed-only); the install rehearsal still gates it"
+fi
+
+# ---- 5. the install rehearsal (always — signed or not) -------------------
+step "install rehearsal (sudo installer -target /)"
+sudo installer -pkg "$FEEDSTOCK/out/installers/$ASSET" -target /
+[ -f "/etc/paths.d/$PRODUCT_NAME" ] || die "/etc/paths.d/$PRODUCT_NAME missing — postinstall did not run"
+grep -q "$INSTALL_ROOT/bin" "/etc/paths.d/$PRODUCT_NAME" || die "/etc/paths.d/$PRODUCT_NAME content wrong"
+case "$COMPOSITION" in
+  lean)
+    [ -x "$INSTALL_ROOT/bin/tebako" ] || die "$INSTALL_ROOT/bin/tebako missing after install"
+    "$INSTALL_ROOT/bin/tebako" --version
+    # The seed ran during the install (the runner is networked): its
+    # effects are the rehearsal — registry registered, the payload
+    # cached into the machine home, the shims dir on PATH.
+    [ -x "$INSTALL_ROOT/bootstrap-seed.sh" ] || die "bootstrap-seed.sh missing after install"
+    grep -q "$INSTALL_ROOT/home/shims" "/etc/paths.d/$PRODUCT_NAME" || die "/etc/paths.d/$PRODUCT_NAME lacks the shims line"
+    [ -f "$INSTALL_ROOT/home/config.yaml" ] || die "the seed did not register the registry ($INSTALL_ROOT/home/config.yaml missing)"
+    for p in $BOOTSTRAP_PAYLOADS; do
+      [ -d "$INSTALL_ROOT/home/payloads/$p" ] || die "seed payload $p missing under $INSTALL_ROOT/home/payloads"
+    done
+    for w in ${BOOTSTRAP_WARM:-}; do
+      # The warm dispatch cached the payload's RUNTIME at install time:
+      # the machine home is complete and a user's dispatch is read-only.
+      [ -d "$INSTALL_ROOT/home/runtimes" ] && [ -n "$(ls -A "$INSTALL_ROOT/home/runtimes")" ] \
+        || die "the warm set is bound but $INSTALL_ROOT/home/runtimes is empty — the install-time prefetch did not land"
+      [ -x "$INSTALL_ROOT/home/shims/$w" ] || die "$INSTALL_ROOT/home/shims/$w missing — the seed did not register the warmed shim"
+      out="$(TEBAKO_HOME="$INSTALL_ROOT/home" "$INSTALL_ROOT/home/shims/$w")" \
+        || die "the warmed shim $w did not dispatch"
+      echo "$out"
+      grep -q "Hello from tebako" <<<"$out" || die "the warmed shim's greeting is wrong: $out"
+    done
+    echo "lean rehearsal OK (registry registered, payload + runtime prefetched at install, the warmed shim greets)"
+    ;;
+  fat)
+    fat_bin="$INSTALL_ROOT/bin/$INSTALL_APP"
+    [ -x "$fat_bin" ] || die "$fat_bin missing after install"
+    # The airgap proof: a SCRATCH home + TEBAKO_OFFLINE=1 — the exe
+    # self-stages its carried runtime and greets with zero network and
+    # zero pre-existing cache.
+    scratch="$(mktemp -d "${RUNNER_TEMP:-/tmp}/fat-home.XXXXXX")"
+    out="$(TEBAKO_OFFLINE=1 TEBAKO_HOME="$scratch" "$fat_bin")" \
+      || die "the installed fat exe did not run offline"
+    echo "$out"
+    grep -q "Hello from tebako" <<<"$out" || die "the fat exe's greeting is wrong: $out"
+    echo "fat rehearsal OK (installed exe greets with TEBAKO_OFFLINE=1 against a scratch home — zero network)"
+    ;;
+esac
+sudo rm -rf "$INSTALL_ROOT" "/etc/paths.d/$PRODUCT_NAME"
+echo "install rehearsal OK ($ASSET: payload lands, postinstall writes the paths.d entry, the installed command runs)"
+echo "pkg: $FEEDSTOCK/out/installers/$ASSET"

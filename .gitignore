@@ -1,4 +1,6 @@
 out/
 work/
 dist/
+.tools/
+.install-src/
 .DS_Store

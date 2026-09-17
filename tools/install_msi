@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# tools/install_msi — build the Windows MSI container for ONE composition
+# of the sample app, binding the pinned WiX template
+# (.install-src/templates/installers/windows/tebako.wxs — fetched and
+# digest-verified by tools/fetch_installer_sources) with THIS org's
+# identity. Container signing is the workflow's Azure step AFTER this
+# build (the sign-in-place split — the tool emits unsigned bytes; a
+# signed-armed pipeline signs before the rehearsal and any ship).
+#
+# Compositions (Tebakofile installers: block):
+#   lean  the four PATH tools + a bootstrap seed (registers the suite
+#         registry, installs the payload, warms its runtime — the
+#         install-time prefetch; network required at install time).
+#   fat   the self-contained pressed exe alone (carries the runtime —
+#         zero network at install or run). FAT_EXE must point at the
+#         pressed (and, when the pipeline arms signing, already
+#         Azure-signed) exe: signing is a post-press step, and signing
+#         AFTER the wrap would leave the binary inside unsigned.
+#
+# Required env: COMPOSITION (lean|fat), PRODUCT_NAME, MANUFACTURER,
+# PKG_VERSION, MSI_UPGRADE_CODE, HOST_ID, INSTALL_APP; lean also
+# BOOTSTRAP_REGISTRY / BOOTSTRAP_PAYLOADS / BOOTSTRAP_WARM; fat also
+# FAT_EXE. Runner: windows Git Bash with wix (WiX v5 dotnet tool) on PATH.
+set -euo pipefail
+
+FEEDSTOCK="$(cd "$(dirname "$0")/.." && pwd)"
+if command -v cygpath >/dev/null 2>&1; then FEEDSTOCK="$(cygpath -m "$FEEDSTOCK")"; fi
+die() { echo "install_msi: $*" >&2; exit 1; }
+
+COMPOSITION="${COMPOSITION:?install_msi: COMPOSITION unset (lean|fat)}"
+PRODUCT_NAME="${PRODUCT_NAME:?install_msi: PRODUCT_NAME unset (pins.rb --installer-env)}"
+MANUFACTURER="${MANUFACTURER:?install_msi: MANUFACTURER unset}"
+PKG_VERSION="${PKG_VERSION:?install_msi: PKG_VERSION unset}"
+MSI_UPGRADE_CODE="${MSI_UPGRADE_CODE:?install_msi: MSI_UPGRADE_CODE unset (the LOCKED per-product-line GUID)}"
+HOST_ID="${HOST_ID:?install_msi: HOST_ID unset}"
+INSTALL_APP="${INSTALL_APP:?install_msi: INSTALL_APP unset}"
+case "$COMPOSITION" in lean | fat) ;; *) die "unknown COMPOSITION: $COMPOSITION" ;; esac
+
+TOOLS_DIR="$FEEDSTOCK/.tools"
+WXS="$FEEDSTOCK/.install-src/templates/installers/windows/tebako.wxs"
+[ -f "$WXS" ] || die "template not staged: $WXS (run tools/fetch_installer_sources first)"
+command -v wix >/dev/null 2>&1 || die "wix (WiX v5 dotnet tool) not on PATH — the workflow installs it"
+
+IN="$FEEDSTOCK/out/msi-input"
+OUT="$FEEDSTOCK/out/installers"
+rm -rf "$IN"
+mkdir -p "$IN" "$OUT"
+
+ASSET="$PRODUCT_NAME-setup-$PKG_VERSION-$HOST_ID.msi"
+# MSI ProductVersion is a strict numeric triplet; the suite version is one
+# by construction, but keep the guard (a rehearsal on an odd ref must
+# still build).
+MSI_VERSION="$PKG_VERSION"
+[[ "$MSI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || MSI_VERSION="0.0.0"
+
+# The Bootstrap define must exist EITHER WAY — WiX's $(var.Bootstrap)
+# errors on an undefined variable even inside a false <?if?> (the
+# product's own lesson); the unbound shape binds it empty.
+BOOTSTRAP_BIND=(-d "Bootstrap=")
+
+case "$COMPOSITION" in
+  lean)
+    # The curated PATH tool set — the pinned, sha-verified bytes fetched
+    # by the workflow's tool step (a missing staged exe fails HERE,
+    # named, never in a user's Add/Remove Programs).
+    for tool in tebako tebako-shim tfs tebako-pkg; do
+      [ -f "$TOOLS_DIR/$tool.exe" ] || die "$tool.exe not staged in $TOOLS_DIR"
+      cp "$TOOLS_DIR/$tool.exe" "$IN/$tool.exe"
+    done
+    : "${BOOTSTRAP_REGISTRY:?install_msi: BOOTSTRAP_REGISTRY unset (the lean composition seeds from it)}"
+    : "${BOOTSTRAP_PAYLOADS:?install_msi: BOOTSTRAP_PAYLOADS unset}"
+    # The install-time seed (the template's web-bootstrapper contract):
+    # self-locating (%~dp0 is the install root), idempotent (tebako
+    # install re-runs clean), user-re-runnable. The warm loop dispatches
+    # each named shim once so its RUNTIME lands in the machine home at
+    # install time — the install-time prefetch; after a warm, a user's
+    # first dispatch is read-only against the machine home.
+    {
+      printf '@echo off\r\n'
+      printf 'rem %s bootstrap seed — composed at build time; safe to re-run.\r\n' "$PRODUCT_NAME"
+      printf 'set "TEBAKO_HOME=%%~dp0home"\r\n'
+      printf 'if not exist "%%TEBAKO_HOME%%\\shims" mkdir "%%TEBAKO_HOME%%\\shims"\r\n'
+      printf '"%%~dp0bin\\tebako.exe" add-registry %s\r\n' "$BOOTSTRAP_REGISTRY"
+      for p in $BOOTSTRAP_PAYLOADS; do
+        printf '"%%~dp0bin\\tebako.exe" install %s\r\n' "$p"
+      done
+      for w in ${BOOTSTRAP_WARM:-}; do
+        case " $BOOTSTRAP_PAYLOADS " in
+          *" $w "*) ;;
+          *) die "BOOTSTRAP_WARM entry $w is not in BOOTSTRAP_PAYLOADS — warm is a subset" ;;
+        esac
+        printf '"%%TEBAKO_HOME%%\\shims\\%s.exe" >NUL 2>&1\r\n' "$w"
+      done
+    } > "$IN/bootstrap-seed.cmd"
+    # WixQuietExec64 lives in the Util extension — pinned to the WiX
+    # tool's line (the workflow installs wix 5.0.2; bump in lockstep).
+    wix extension add --global WixToolset.Util.wixext/5.0.2 >/dev/null
+    BOOTSTRAP_BIND=(-d Bootstrap=1)
+    echo "staged: the 4 PATH tools + the bootstrap seed (registry $BOOTSTRAP_REGISTRY — payloads: $BOOTSTRAP_PAYLOADS; warm: ${BOOTSTRAP_WARM:-none})"
+    ;;
+  fat)
+    : "${FAT_EXE:?install_msi: FAT_EXE unset (the pressed self-contained exe)}"
+    [ -f "$FAT_EXE" ] || die "FAT_EXE not found: $FAT_EXE"
+    cp "$FAT_EXE" "$IN/$INSTALL_APP.exe"
+    echo "staged: the self-contained $INSTALL_APP.exe ($(stat -c %s "$IN/$INSTALL_APP.exe" 2>/dev/null || stat -f %z "$IN/$INSTALL_APP.exe") bytes — runtime pair carried as slots)"
+    ;;
+esac
+
+# BinDir must be ABSOLUTE and WINDOWS-spelled: WiX resolves relative
+# authoring paths against the .wxs's directory, and a Git-Bash $PWD is
+# not a path a native .NET tool can open.
+BIN_BINDIR="$IN"
+WXS_NATIVE="$WXS"
+if command -v cygpath >/dev/null 2>&1; then
+  BIN_BINDIR="$(cygpath -w "$IN")"
+  WXS_NATIVE="$(cygpath -w "$WXS")"
+fi
+wix build -arch x64 "$WXS_NATIVE" \
+  -d "ProductName=$PRODUCT_NAME" \
+  -d "ProductVersion=$MSI_VERSION" \
+  -d "Manufacturer=$MANUFACTURER" \
+  -d "UpgradeCode=$MSI_UPGRADE_CODE" \
+  ${BOOTSTRAP_BIND[@]+"${BOOTSTRAP_BIND[@]}"} \
+  -d "BinDir=$BIN_BINDIR" \
+  -o "$OUT/$ASSET"
+echo "built: out/installers/$ASSET (unsigned — the Azure step signs in place when armed)"

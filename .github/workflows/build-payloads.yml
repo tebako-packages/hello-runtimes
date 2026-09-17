@@ -5,6 +5,14 @@ name: build-payloads
 # the app (the payload bytes are runtime-independent — pure-language
 # law), then a tag-dispatched publish signs and ships the set.
 #
+# The installer legs (installer-msi / installer-pkg) build the OS-native
+# containers for hello-ruby in both compositions (lean: toolset +
+# install-time seed with the runtime prefetched at install; fat: the
+# self-contained press — zero network at install or run), rehearsing the
+# install on EVERY trigger and shipping signed containers exactly on the
+# owner-dispatched publish run (containers ship signed-only — a disarmed
+# signing plane builds + rehearses unsigned and ships nothing).
+#
 # Leg grammar: every leg is runner-native (the suite compiles nothing).
 # GH_TOKEN needs contents:read on the runtime factories (public).
 #
@@ -309,9 +317,374 @@ jobs:
           grep -q "acme flavor 0.1.0" <<<"$out2" \
             || { echo "::error::the env pin did not attach the slice"; exit 1; }
 
+  installer-msi:
+    # The Windows MSI container for hello-ruby, one leg per composition
+    # (Tebakofile installers:). The environment is the Azure OIDC
+    # boundary — the federated credential matches on it.
+    name: installer msi (${{ matrix.composition }})
+    needs: [plan]
+    runs-on: windows-2022
+    environment: windows-signing
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        composition: [lean, fat]
+    defaults:
+      run:
+        shell: bash        # Git Bash; the rehearsal steps use pwsh directly
+    env:
+      # The signing plane arms EXACTLY on the owner-dispatched publish run
+      # on a tag — every other trigger rehearses unsigned and ships
+      # nothing (a same-repo PR would otherwise Azure-sign rehearsal
+      # bytes with the production profile).
+      ARM: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && startsWith(github.ref, 'refs/tags/') }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v6.0.0
+
+      - name: Leg env (Tebakofile is the SSOT)
+        run: |
+          ruby tools/pins.rb --env hello-ruby x86_64-windows-ucrt >> "$GITHUB_ENV"
+          ruby tools/pins.rb --installer-env "${{ matrix.composition }}" >> "$GITHUB_ENV"
+
+      - name: Fetch the pinned tebako tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p .tools && cd .tools
+          base="https://github.com/tamatebako/tebako/releases/download/$TEBAKO_RELEASE"
+          # -fsSL + retries: a transient flake fails loudly, never a
+          # silent error page the sha pin then rejects.
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TEBAKO_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TFS_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$SHIM_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TPKG_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/SHA256SUMS"
+          {
+            echo "$TEBAKO_SHA256  $TEBAKO_ASSET"
+            echo "$TFS_SHA256  $TFS_ASSET"
+            echo "$SHIM_SHA256  $SHIM_ASSET"
+            echo "$TPKG_SHA256  $TPKG_ASSET"
+          } > SHA256PINS
+          if command -v sha256sum >/dev/null 2>&1; then sha256sum -c SHA256PINS; else shasum -a 256 -c SHA256PINS; fi
+          # The pinned digests must also agree with the release's own
+          # SHA256SUMS (a release-side swap is a mismatch, named).
+          for asset in "$TEBAKO_ASSET" "$TFS_ASSET" "$SHIM_ASSET" "$TPKG_ASSET"; do
+            want="$(grep "  $asset\$" SHA256PINS | cut -d' ' -f1)"
+            got="$(grep "  $asset\$" SHA256SUMS | cut -d' ' -f1 || true)"
+            [ "$got" = "$want" ] || { echo "::error::pin mismatch for $asset: Tebakofile=$want release=${got:-ABSENT}"; exit 1; }
+          done
+          chmod +x "$TEBAKO_ASSET" "$TFS_ASSET" "$SHIM_ASSET" "$TPKG_ASSET"
+          mv "$TEBAKO_ASSET" tebako.exe
+          mv "$TFS_ASSET" tfs.exe
+          mv "$SHIM_ASSET" tebako-shim.exe
+          mv "$TPKG_ASSET" tebako-pkg.exe
+
+      - name: Fetch the pinned installer source set (sha256-verified)
+        run: tools/fetch_installer_sources
+
+      - name: Set up WiX v5
+        run: |
+          set -euo pipefail
+          dotnet tool install --global wix --version 5.0.2
+          echo "$USERPROFILE/.dotnet/tools" >> "$GITHUB_PATH"
+          wix --version
+
+      - name: Arm check — Windows signing
+        id: signgate
+        env:
+          WINDOWS_SIGNING_ENABLED: ${{ env.ARM == 'true' && vars.WINDOWS_SIGNING_ENABLED || 'false' }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_ENDPOINT: ${{ vars.AZURE_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT_NAME: ${{ vars.AZURE_SIGNING_ACCOUNT_NAME }}
+          AZURE_SIGNING_CERT_PROFILE: ${{ vars.AZURE_SIGNING_CERT_PROFILE }}
+        run: bash .install-src/ci/windows-sign-gate.sh
+
+      - name: Press the self-contained exe (fat composition)
+        if: matrix.composition == 'fat'
+        env:
+          TEBAKO_SIGNING_KEY: ${{ secrets.TEBAKO_CI_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          # The runtime pair resolves through the CLI's own verified
+          # fetch (release-index sha256 + signature checks in-process) —
+          # the standard press path; the recipe pins the exact line.
+          export TEBAKO_HOME; TEBAKO_HOME="$(cygpath -m "$PWD/out/press-home")"
+          mkdir -p out/fat
+          sign=()
+          if [ -n "${TEBAKO_SIGNING_KEY:-}" ]; then
+            # The tebako-plane trailer signature (the registry-pinned CI
+            # subkey) — the third signature surface of the container.
+            mkdir -p "out/press-home/keys"
+            printf '%s\n' "$TEBAKO_SIGNING_KEY" > "out/press-home/keys/ci-signing.key"
+            chmod 600 "out/press-home/keys/ci-signing.key"
+            sign=(--sign="$SIGNING_KEYID")
+          else
+            echo "::notice::no signing key in this context — the rehearsal press carries an unsigned trailer"
+          fi
+          ./.tools/tebako.exe press -r "$(cygpath -m "$PWD/apps/hello-ruby")" -e hello.rb \
+            -m self-contained -R "$RT_V" --tebako-version "$RT_TEBAKO" --format limnifs \
+            -o "$(cygpath -m "$PWD/out/fat/hello-ruby")" -p "$(cygpath -m "$PWD/out/press-prefix")" \
+            ${sign[@]+"${sign[@]}"}
+          fat_exe="$(find out/fat -maxdepth 1 -type f -name 'hello-ruby*' | head -1)"
+          [ -n "$fat_exe" ] || { echo "::error::press produced no exe under out/fat"; exit 1; }
+          echo "FAT_EXE=$(cygpath -m "$PWD/$fat_exe")" >> "$GITHUB_ENV"
+
+      - name: Azure login (OIDC)
+        if: steps.signgate.outputs.armed == 'true'
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2 (sha-pinned 2026-09-11)
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign the fat exe (post-press, pre-wrap — the binary inside is its own signature surface)
+        if: steps.signgate.outputs.armed == 'true' && matrix.composition == 'fat'
+        uses: Azure/artifact-signing-action@b443cf8ea4124818d2ea9f043cba29fc3ec47b16 # v1 (sha-pinned 2026-09-11)
+        with:
+          endpoint: ${{ vars.AZURE_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_CERT_PROFILE }}
+          files-folder: out/fat
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: hello-ruby (tebako self-contained package)
+
+      - name: Verify the fat exe's signature
+        if: steps.signgate.outputs.armed == 'true' && matrix.composition == 'fat'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sig = Get-AuthenticodeSignature "$env:FAT_EXE"
+          if ($sig.Status -ne 'Valid') { Write-Host "::error::fat exe Authenticode status '$($sig.Status)'"; exit 1 }
+          if ($null -eq $sig.TimeStamperCertificate) { Write-Host "::error::no TimeStamperCertificate on the fat exe"; exit 1 }
+          Write-Host "fat exe signed+timestamped: $($sig.SignerCertificate.Subject)"
+
+      - name: Build the MSI (unsigned — the Azure step signs in place)
+        run: tools/install_msi
+
+      - name: Sign the MSI (Azure Artifact Signing signs MSI natively)
+        if: steps.signgate.outputs.armed == 'true'
+        uses: Azure/artifact-signing-action@b443cf8ea4124818d2ea9f043cba29fc3ec47b16 # v1 (sha-pinned 2026-09-11)
+        with:
+          endpoint: ${{ vars.AZURE_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_CERT_PROFILE }}
+          files-folder: out/installers
+          files-folder-filter: msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: ${{ env.PRODUCT_NAME }} installer (tebako-packages)
+
+      - name: Verify the MSI signature
+        if: steps.signgate.outputs.armed == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = @(Get-ChildItem -Path 'out\installers' -Filter '*.msi' -File)
+          if ($msi.Count -ne 1) { Write-Host "::error::expected exactly 1 MSI under out\installers, found $($msi.Count)"; exit 1 }
+          $signtool = @(
+            Get-ChildItem -Path "$env:LOCALAPPDATA\TrustedSigning\Microsoft.Windows.SDK.BuildTools" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue
+            Get-ChildItem -Path "$env:LOCALAPPDATA\ArtifactSigning\Microsoft.Windows.SDK.BuildTools" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue
+            Get-ChildItem -Path 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue
+          ) | Where-Object { $_.FullName -match '\\x64\\' } |
+              Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { Write-Host "::error::signtool.exe not found"; exit 1 }
+          $out = & $signtool.FullName verify /pa /v $msi[0].FullName 2>&1 | Out-String
+          Write-Host $out
+          if ($LASTEXITCODE -ne 0) { Write-Host "::error::signtool verify /pa FAILED for the MSI"; exit 1 }
+          if ($out -notmatch 'signature is timestamped' -and $out -notmatch 'RFC ?3161') { Write-Host "::error::no RFC 3161 countersignature on the MSI"; exit 1 }
+          $sig = Get-AuthenticodeSignature $msi[0].FullName
+          if ($sig.Status -ne 'Valid') { Write-Host "::error::Get-AuthenticodeSignature status '$($sig.Status)'"; exit 1 }
+          if ($null -eq $sig.TimeStamperCertificate) { Write-Host "::error::no TimeStamperCertificate on the MSI"; exit 1 }
+          Write-Host "MSI signed+timestamped: $($sig.SignerCertificate.Subject)"
+
+      # The install rehearsal gates ALWAYS (signed or not — it proves the
+      # container actually installs and the installed command runs; a
+      # broken template fails HERE, never on a user box).
+      - name: Install rehearsal (msiexec round-trip)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = @(Get-ChildItem -Path 'out\installers' -Filter '*.msi' -File)
+          if ($msi.Count -ne 1) { Write-Host "::error::expected exactly 1 MSI under out\installers"; exit 1 }
+          $root = "C:\Program Files\$env:PRODUCT_NAME"
+          $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/i', $msi[0].FullName, '/qn', '/norestart', '/l*v', "$env:RUNNER_TEMP\msi-install.log"
+          if ($p.ExitCode -ne 0) { Write-Host "::error::msiexec /i failed: $($p.ExitCode)"; exit 1 }
+          if ($env:COMPOSITION -eq 'lean') {
+            & "$root\bin\tebako.exe" --version
+            if ($LASTEXITCODE -ne 0) { Write-Host "::error::installed tebako.exe --version failed"; exit 1 }
+            # The seed ran at install (deferred, SYSTEM — the runner is
+            # networked): its effects are the rehearsal. The install-time
+            # prefetch (the warm set) must have landed the runtime.
+            foreach ($f in @('bootstrap-seed.cmd', 'home\config.yaml', "home\payloads\$env:INSTALL_APP")) {
+              if (-not (Test-Path "$root\$f")) { Write-Host "::error::seed effect missing: $root\$f (see $env:RUNNER_TEMP\msi-install.log)"; exit 1 }
+            }
+            $rt = @(Get-ChildItem "$root\home\runtimes" -Directory -ErrorAction SilentlyContinue)
+            if ($rt.Count -eq 0) { Write-Host "::error::the warm set is bound but $root\home\runtimes is empty — the install-time prefetch did not land"; exit 1 }
+            $out = & "$root\home\shims\$env:INSTALL_APP.exe" 2>&1 | Out-String
+            Write-Host $out
+            if ($out -notmatch 'Hello from tebako \(ruby') { Write-Host "::error::the warmed shim's greeting is wrong: $out"; exit 1 }
+            Write-Host 'lean rehearsal OK (registry registered, payload + runtime prefetched at install, the warmed shim greets)'
+          } else {
+            # The airgap proof: a scratch home + TEBAKO_OFFLINE=1 — the
+            # exe self-stages its carried runtime and greets with zero
+            # network and zero pre-existing cache.
+            $env:TEBAKO_OFFLINE = '1'
+            $env:TEBAKO_HOME = "$env:RUNNER_TEMP\fat-home"
+            $out = & "$root\bin\$env:INSTALL_APP.exe" 2>&1 | Out-String
+            Remove-Item Env:TEBAKO_OFFLINE, Env:TEBAKO_HOME
+            Write-Host $out
+            if ($out -notmatch "Hello from tebako \(ruby $env:RT_V") { Write-Host "::error::the fat exe's greeting is wrong: $out"; exit 1 }
+            Write-Host 'fat rehearsal OK (installed exe greets with TEBAKO_OFFLINE=1 against a scratch home — zero network)'
+          }
+          $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/x', $msi[0].FullName, '/qn', '/norestart'
+          if ($p.ExitCode -ne 0) { Write-Host "::error::msiexec /x failed: $($p.ExitCode)"; exit 1 }
+          if (Test-Path "$root\bin") { Write-Host "::error::uninstall left $root\bin"; exit 1 }
+          # The seeded machine home survives uninstall BY DESIGN (store
+          # content is machine data — a reinstall reuses it); the
+          # rehearsal cleans it up itself.
+          if (Test-Path $root) { Remove-Item -Recurse -Force $root }
+          Write-Host 'install rehearsal OK (install → run → uninstall, the package-authored tree clean)'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.composition }}-windows-ucrt64
+          path: out/installers/
+          retention-days: 1
+
+  installer-pkg:
+    # The macOS pkg container for hello-ruby, one leg per (composition ×
+    # arch). Signing is in-script (productsign + notarize + staple)
+    # between the two signing gates — the fail-closed setup scripts are
+    # part of the pinned installer source set.
+    name: installer pkg (${{ matrix.composition }}, ${{ matrix.platform }})
+    needs: [plan]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {composition: lean, platform: macos-arm64,  triplet: aarch64-macos, os: macos-latest}
+          - {composition: lean, platform: macos-x86_64, triplet: x86_64-macos,  os: macos-15-intel}
+          - {composition: fat,  platform: macos-arm64,  triplet: aarch64-macos, os: macos-latest}
+          - {composition: fat,  platform: macos-x86_64, triplet: x86_64-macos,  os: macos-15-intel}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      ARM: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && startsWith(github.ref, 'refs/tags/') }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v6.0.0
+
+      - name: Leg env (Tebakofile is the SSOT)
+        run: |
+          ruby tools/pins.rb --env hello-ruby "${{ matrix.triplet }}" >> "$GITHUB_ENV"
+          ruby tools/pins.rb --installer-env "${{ matrix.composition }}" >> "$GITHUB_ENV"
+
+      - name: Fetch the pinned tebako tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p .tools && cd .tools
+          base="https://github.com/tamatebako/tebako/releases/download/$TEBAKO_RELEASE"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TEBAKO_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TFS_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$SHIM_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TPKG_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/SHA256SUMS"
+          {
+            echo "$TEBAKO_SHA256  $TEBAKO_ASSET"
+            echo "$TFS_SHA256  $TFS_ASSET"
+            echo "$SHIM_SHA256  $SHIM_ASSET"
+            echo "$TPKG_SHA256  $TPKG_ASSET"
+          } > SHA256PINS
+          shasum -a 256 -c SHA256PINS
+          for asset in "$TEBAKO_ASSET" "$TFS_ASSET" "$SHIM_ASSET" "$TPKG_ASSET"; do
+            want="$(grep "  $asset\$" SHA256PINS | cut -d' ' -f1)"
+            got="$(grep "  $asset\$" SHA256SUMS | cut -d' ' -f1 || true)"
+            [ "$got" = "$want" ] || { echo "::error::pin mismatch for $asset: Tebakofile=$want release=${got:-ABSENT}"; exit 1; }
+          done
+          chmod +x "$TEBAKO_ASSET" "$TFS_ASSET" "$SHIM_ASSET" "$TPKG_ASSET"
+          mv "$TEBAKO_ASSET" tebako
+          mv "$TFS_ASSET" tfs
+          mv "$SHIM_ASSET" tebako-shim
+          mv "$TPKG_ASSET" tebako-pkg
+
+      - name: Fetch the pinned installer source set (sha256-verified)
+        run: tools/fetch_installer_sources
+
+      - name: Set up Apple signing (Developer ID Application — the fat exe inside)
+        if: matrix.composition == 'fat'
+        env:
+          APPLE_SIGNING_ENABLED: ${{ env.ARM == 'true' && vars.APPLE_SIGNING_ENABLED || 'false' }}
+          APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash .install-src/ci/macos-sign-setup.sh
+
+      - name: Set up Apple installer signing (Developer ID Installer — the pkg container)
+        id: signgate
+        env:
+          APPLE_INSTALLER_SIGNING_ENABLED: ${{ env.ARM == 'true' && vars.APPLE_INSTALLER_SIGNING_ENABLED || 'false' }}
+          APPLE_SIGNING_ENABLED: ${{ env.ARM == 'true' && vars.APPLE_SIGNING_ENABLED || 'false' }}
+          APPLE_DEVELOPER_ID_INSTALLER_P12: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12 }}
+          APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD }}
+        run: bash .install-src/ci/macos-sign-setup-installer.sh
+
+      - name: Press the self-contained exe (fat composition)
+        if: matrix.composition == 'fat'
+        env:
+          TEBAKO_SIGNING_KEY: ${{ secrets.TEBAKO_CI_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          export TEBAKO_HOME="$PWD/out/press-home"
+          mkdir -p out/fat
+          sign=()
+          if [ -n "${TEBAKO_SIGNING_KEY:-}" ]; then
+            mkdir -p "$TEBAKO_HOME/keys"
+            printf '%s\n' "$TEBAKO_SIGNING_KEY" > "$TEBAKO_HOME/keys/ci-signing.key"
+            chmod 600 "$TEBAKO_HOME/keys/ci-signing.key"
+            sign=(--sign="$SIGNING_KEYID")
+          else
+            echo "::notice::no signing key in this context — the rehearsal press carries an unsigned trailer"
+          fi
+          ./.tools/tebako press -r "$PWD/apps/hello-ruby" -e hello.rb \
+            -m self-contained -R "$RT_V" --tebako-version "$RT_TEBAKO" --format limnifs \
+            -o "$PWD/out/fat/hello-ruby" -p "$PWD/out/press-prefix" \
+            ${sign[@]+"${sign[@]}"}
+          fat_exe="$(find out/fat -maxdepth 1 -type f -name 'hello-ruby*' | head -1)"
+          [ -n "$fat_exe" ] || { echo "::error::press produced no exe under out/fat"; exit 1; }
+          echo "FAT_EXE=$PWD/$fat_exe" >> "$GITHUB_ENV"
+
+      # Build → [armed: codesign the fat exe →] pkgbuild → productbuild →
+      # [armed: productsign + notarize + staple] → install rehearsal
+      # (always). All in-script (tools/install_pkg).
+      - name: Build + sign + notarize + rehearse the pkg
+        env:
+          ENTITLEMENTS: ${{ github.workspace }}/.install-src/ci/runtime.entitlements
+          APPLE_INSTALLER_SIGNING_ENABLED: ${{ env.ARM == 'true' && vars.APPLE_INSTALLER_SIGNING_ENABLED || 'false' }}
+          APPLE_SIGNING_ENABLED: ${{ env.ARM == 'true' && vars.APPLE_SIGNING_ENABLED || 'false' }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ASC_KEY_P8: ${{ secrets.APPLE_ASC_KEY_P8 }}
+          APPLE_ASC_KEY_ID: ${{ secrets.APPLE_ASC_KEY_ID }}
+          APPLE_ASC_ISSUER_ID: ${{ secrets.APPLE_ASC_ISSUER_ID }}
+        run: tools/install_pkg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.composition }}-${{ matrix.platform }}
+          path: out/installers/
+          retention-days: 1
+
   publish:
-    if: ${{ always() && !cancelled() && inputs.publish && needs.build.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
-    needs: [plan, build]
+    if: ${{ always() && !cancelled() && inputs.publish && needs.build.result == 'success' && needs.installer-msi.result == 'success' && needs.installer-pkg.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
+    needs: [plan, build, installer-msi, installer-pkg]
     runs-on: macos-latest
     defaults:
       run:
@@ -332,14 +705,18 @@ jobs:
           base="https://github.com/tamatebako/tebako/releases/download/$TEBAKO_RELEASE"
           curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TEBAKO_ASSET"
           curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$SHIM_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TPKG_ASSET"
           curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/SHA256SUMS"
           echo "$TEBAKO_SHA256  $TEBAKO_ASSET" | shasum -a 256 -c -
           echo "$SHIM_SHA256  $SHIM_ASSET" | shasum -a 256 -c -
-          chmod +x "$TEBAKO_ASSET" "$SHIM_ASSET"
+          echo "$TPKG_SHA256  $TPKG_ASSET" | shasum -a 256 -c -
+          chmod +x "$TEBAKO_ASSET" "$SHIM_ASSET" "$TPKG_ASSET"
           # The publish verify installs the payload — the dispatcher must
           # sit BESIDE the CLI (shims resolve it sibling-wise).
           mv "$TEBAKO_ASSET" tebako
           mv "$SHIM_ASSET" tebako-shim
+          # tebako-pkg signs the installer containers (detached .asc).
+          mv "$TPKG_ASSET" tebako-pkg
 
       - uses: actions/download-artifact@v4
         with:
@@ -459,6 +836,46 @@ jobs:
               --registry-out "$PWD/tpkg-registry.yaml" \
               --skip-verify
           done
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installer-*
+          path: out/installers
+
+      - name: Sign + ship the installer containers
+        # Containers ship signed-only: the legs build + rehearse on every
+        # trigger but ship exactly when their signing plane armed (the
+        # same vars the legs gated on — a disarmed plane means the
+        # artifacts hold UNSIGNED rehearsal bytes, which never land on
+        # the release). The tebako-plane signature (detached .asc per
+        # container) rides the same CI subkey as the payloads.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHIP_MSI: ${{ vars.WINDOWS_SIGNING_ENABLED }}
+          SHIP_PKG: ${{ vars.APPLE_INSTALLER_SIGNING_ENABLED }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=()
+          if [ "${SHIP_MSI:-}" = "true" ]; then
+            for f in out/installers/installer-*-windows-ucrt64/*.msi; do assets+=("$f"); done
+          fi
+          if [ "${SHIP_PKG:-}" = "true" ]; then
+            for f in out/installers/installer-*-macos-*/*.pkg; do assets+=("$f"); done
+          fi
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "::notice::both installer signing planes disarmed — no installer containers ship"
+            exit 0
+          fi
+          TEBAKO_HOME="${TEBAKO_HOME:-$HOME/.tebako}"
+          ./.tools/tebako-pkg sign --key="$SIGNING_KEYID" --no-sums "${assets[@]}"
+          upload=()
+          for f in "${assets[@]}"; do
+            [ -f "$f.asc" ] || { echo "::error::$f.asc missing — the container signing did not land"; exit 1; }
+            upload+=("$f" "$f.asc")
+          done
+          gh release upload "${{ github.ref_name }}" "${upload[@]}" --clobber
+          echo "shipped ${#assets[@]} installer container(s) + .asc to ${GITHUB_REF_NAME}"
 
       - name: Registry default tracks the suite line
         # The suite versions together (Tebakofile): a publish moves every

@@ -4,7 +4,7 @@
 # The one-repo-per-package convention bends here by design — this is the
 # reference the docs walk through.
 name: hello-runtimes
-version: "1.0.1"               # every payload in the suite versions together
+version: "1.0.2"               # every payload in the suite versions together
 
 # The pinned tebako toolchain (tfs mkimage + tebako check/publish),
 # digest-pinned per platform against the release's own SHA256SUMS (the
@@ -17,22 +17,27 @@ tools:
       tebako: "f202f1853f469a23760b07f346a7b727d7c2c903548f25a67fa70ebdae140fb8"
       tfs:    "8bc65286cf052b17aa6a95bbd277a06f3ab09c3df8b7d919ae9609085b9ed13e"
       shim:   "9bacf97be8d80a847d3cb80a759327c0ac57b4de3cf7a4bad2626778c671cb3d"
+      pkg:    "59865eab57f8b7efb4e57236e9ea028725482a7d31a4ae9e96b7ea63a0459507"
     linux-gnu-arm64:
       tebako: "68ba2fcd18d0401719011b08ccff6bc2cb50b1113c542c52062e36d065f849b0"
       tfs:    "7ad59af2a65a16752cd6bb7318d4d6d0cae935e7349d901173bd327f979f90aa"
       shim:   "b68a911e412b315a79a189f628f26096c1c43d4a9523e3749fe4afa6dc2081d7"
+      pkg:    "b6976ab284a04219ea937d406e6521e1acea6a1cda1c01a389dfd5d535fd67aa"
     macos-x86_64:
       tebako: "17e46a39eb05085276d92110932304e36034a23ac18b9b49907dc79779e8f546"
       tfs:    "836386fb7bf5132d870eed1263ff894c6cf7f3d6b05539a82c9aaff2fda8da57"
       shim:   "2b13797aefe90b26d51ac2463acdf63a924e3fa71579567fff9e8bf5ede0db52"
+      pkg:    "039801fcd8651404e188923eacd19688a3b1391bcf893aefeb3e1c1c0544bf5f"
     macos-arm64:
       tebako: "ddf1f90941dc7357b13615f13c9671600663f047b284f9f0969114ce42288381"
       tfs:    "61aa6baf640243cb6692c0470cb82da54e9c609cfd58fb410e7a31c6bbb41294"
       shim:   "23d87399928fa534b421528e67b511723c758f0439f1ca3127b62e8248befd42"
+      pkg:    "49648f4ce2b7ad2e4ad1490eee1cf6e5902e0f47cf145b21beb7cd13b5b665b9"
     windows-ucrt64:
       tebako: "a2721cd9a2f41eacfc93a6153c7c741d45c8d279bd7a0ea59aa7522a75511390"
       tfs:    "375ef4328138225fde359830f564a606bb29e4ac0952c4843d04a937e64358a7"
       shim:   "25a238e4f31d2e4865c93e67def08f225be06dd51b30a88bbe1e66664f86daea"
+      pkg:    "151ba56900295441f8bc95f61ae1be6b959df20281bb01bbcb311d6d7a0078f6"
 
 # The apps. Each names its runtime FACTORY + the exact runtime line(s)
 # the legs stage (release channel only — run-artifacts stay a factory
@@ -106,6 +111,60 @@ apps:
     factory: tamatebako/tebako-runtime-ruby
     runtimes: []
     platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
+
+# The installer samples — OS-native containers (MSI + pkg) for one app of
+# the suite, in BOTH compositions (the client-product reference shape):
+#   lean  the tebako toolset + an install-time seed that registers this
+#         suite's registry, installs the payload, and WARMS its runtime
+#         (the seed dispatches the shim once at install) — network at
+#         install time, none at first run. The runtime is prefetched at
+#         install time, never lazily at first run.
+#   fat   a self-contained press (bootstrap + runtime exe + env image +
+#         payload in ONE exe, riding the app's FIRST listed runtime
+#         line) — zero network at install or run (the airgap shape).
+# Both bind the product repo's parameterized installer templates with
+# THIS org's identity — the same files a client CI binds with its own.
+installers:
+  app: hello-ruby
+  registry: "tfs:github:tebako-packages/hello-runtimes"
+  # The install-time seed's warm set (must stay a subset of the payload
+  # set): print-and-exit entrypoints only — the seed runs no timeout.
+  warm: [hello-ruby]
+  min_macos: "12.0"
+  manufacturer: tebako-packages        # the MSI registry key root / pkg publisher line
+  compositions:
+    lean:
+      product_name: hello-ruby
+      org_id: org.tebako-packages    # the pkg identifier prefix (reverse-DNS, one per publisher)
+      install_root: /opt/hello-ruby
+      # The MSI UpgradeCode pairs upgrades for this product line —
+      # LOCKED FOREVER (minted 2026-09-17). A fork MUST mint its own.
+      msi_upgrade_code: "0D82909B-C797-4948-B680-D61D38DDDA81"
+    fat:
+      product_name: hello-ruby-fat
+      org_id: org.tebako-packages
+      install_root: /opt/hello-ruby-fat
+      msi_upgrade_code: "DC542BA7-498F-43FC-A6F5-5578953B1E13"   # LOCKED 2026-09-17
+  # The installer source set, fetched at CI time and digest-verified file
+  # by file (never forked): the parameterized templates + the fail-closed
+  # signing gates from the pinned tebako release tag (tools.release), and
+  # the fat exe's codesign profile FLOWED from the ruby runtime factory
+  # (the single owner of the runtime signing profile) at the pinned ruby
+  # runtime release. A pin mismatch is a named failure, never a skip.
+  sources:
+    - repo: tamatebako/tebako
+      ref: tools        # resolves to the tools.release tag
+      files:
+        templates/installers/windows/tebako.wxs: "f0de054645489620b647d09e37e09e03ea8c5ecaf894474fb78058a9eeac9a7a"
+        templates/installers/macos/distribution.xml: "ef46ce5c9c560e38892ff1eecf48541d89648a891f61d6d11a7b02282801930a"
+        templates/installers/macos/scripts/postinstall: "863d3c80921ce086ce3b3c9a9a8bfc5391b4bd3d943da3b898a52aaa864533d7"
+        ci/windows-sign-gate.sh: "1aaaa600558181d101c25db2de72d4094ff09da4da5a72d44ff0c1097913ad79"
+        ci/macos-sign-setup.sh: "d92ca2e25bf0c540fdc82adc873e991d829a1058bbe82e3405fe2789b9301989"
+        ci/macos-sign-setup-installer.sh: "38aaaf13410327764e3dadaa68d77ca541fd6e2a615c8823d7780bdcb926eb45"
+    - repo: tamatebako/tebako-runtime-ruby
+      ref: runtime      # resolves to the app's first runtime line's release tag
+      files:
+        ci/runtime.entitlements: "fd21715f3bbda901566cd2368c989eaf326cf0a4b6aaf58bacf0bcc7383bfe24"
 
 # The leg topology (host runner per triplet). Every leg is runner-native;
 # only the java leg compiles — the app's own source, with the runner's
