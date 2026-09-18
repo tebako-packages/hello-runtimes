@@ -14,30 +14,30 @@ tools:
   release: "v2.8.11"
   sha256:
     linux-gnu-x86_64:
-      tebako:    "bb6f6b34ca121c22f984dff8f50dd61ec6420b84b709cec1a4677ad42c8bef0a"
-      tfs:    "6dbd8a4daf44f47226968df2674b486ddf85736cdf0b6802f3287fec0457af17"
-      shim:    "873c2ae1ebef1bf5638d52cf8e79e2dcb972b32e5935edd405b53e427ec0e790"
-      pkg:    "1a02299d96ff320e8e596cb1310a329b656341aeb9a9410761a852e58e9bd41c"
+      tebako:    "3ab7dbfa09d24b3acea20a47cc45f26f489b9a294dfabf1a9175a210d7432a55"
+      tfs:    "c3a5d8942028953c2f7f156f5ccdae1f4e8f1c43ae6942e242f9a00e0e8b7dc3"
+      shim:    "087c5dcb924cf3aa7cc6bc77015f80a5c08bacd901c7f392301fbefd5a952535"
+      pkg:    "f2b983af14c8293fcaa81d405ae5b127792e72f287a119a3272cbef230093ed3"
     linux-gnu-arm64:
-      tebako:    "52e09caa9be7230822031ed4078e563b8d80b8c64cfb58e4172906c340e8cb20"
-      tfs:    "ac38cb79b44372b4d331c444b02b5f875511fe21738ce4e0f4cd3b5f14e5efdc"
-      shim:    "930fc761191db7919e71cd62817ba8ba80ba064152786fc37970db27aefe798f"
-      pkg:    "43dd8c623f21e2aede955fbf6bb6c72804c42e007b0433f8791b4ebe4dd68bdc"
+      tebako:    "bf23db7597256a3c6518836480b957f23c2117f5af7c195df00fca4bc8e4e2c6"
+      tfs:    "90a905ee9d705bfcde6c439e9c15d790ba2ac4e1d235312caebfd269f3ac936d"
+      shim:    "f86f8e776b5f346aa146122d68e15934c7441505f36d74e8438dd4fd1de10f17"
+      pkg:    "2a4fd34e0d3a368b82f1cbdba44b2da1a493465cff3ac303a9ab31645ddb8a51"
     macos-x86_64:
-      tebako:    "8e984def0df8afb5104b02980bb6861dbb89cf448a70a664c38736333ba7da18"
-      tfs:    "73f5de494913b5df10535808db850af727cd552d125478eed6eb648e5f797cf4"
-      shim:    "b7e6e8522d954dc7712507169222a7dc9c119d52d2114505c7d50ad09ceb8970"
-      pkg:    "371580229ba6d4ad65c29a7e3dbe00aff3af29c09a63541bc62ed6e0c7331453"
+      tebako:    "baf62380e0d64158187477afeee2ba7e6a1e1207e74d6aa4cc56b8e54f3490ed"
+      tfs:    "19dc50c0e66b6a9b8c90316ad70b8074ab80855e07600836380fe0e5f98960cf"
+      shim:    "5280cde98410a1813f34b84c92d1562c9ea456a6174b48142e1ba993d4da0155"
+      pkg:    "b8c14237e0bbe2286380156d07fe4e7d4211d524ae4086463955e60827aba952"
     macos-arm64:
-      tebako:    "ec709c86a10de76fa33f458c869142c23d71e2c2aaf0aecfa22c8582ab4db5d6"
-      tfs:    "26d170f0071623702bef9ff089d3d77040255fe3249680ea3758bfe1c2de443b"
-      shim:    "b82007a027f7f4e910a7dd9c0634a9dad3b3e6b3d66e604aac16a9d9e65b9222"
-      pkg:    "9cf3b408f4750da8db26b523b8ae45798cd6da50b218784b0ade362a6308ae0a"
+      tebako:    "ef2a71996681056f90f35196f8e0ce9c24e825a19a0c735dac8194d4371462aa"
+      tfs:    "62203198ff485d6a51318176828a4f7e620b1ca98a1b57c000f19ce60f412470"
+      shim:    "5d4ff4454d1d4a28f0e2a60e4ae92d44931b29b53c662695deeec25abfd8f0ff"
+      pkg:    "9d7c7e3d826ea37d3dd74f394281ea9ad5a0fb52724adeec0378e4b999346a81"
     windows-ucrt64:
-      tebako:    "2f7448405fb2ccf5e5bf7073c3dfa6d84d0d07bae0cecb895230cfc3ccc96c18"
-      tfs:    "05109f43c17aa994e44991732955bbe637ab7c139f219900a134cae047a599a2"
-      shim:    "615955c7ac30589b3af924d2fd298a3711ec078da9d0a690ebb00284a3c1545c"
-      pkg:    "e30e7ec8fb730a83025f7a0579abd92dc91039d6d0ff6a8f907cc294011c1a99"
+      tebako:    "92c8ea49ae642c36fbdaefb115d8b1a335266b9daf46ccc4266e760580081983"
+      tfs:    "3f3b91920bdf6a8b9a6ec3f2a869cb055398e5c12a6ebfd950a80b8919289fe1"
+      shim:    "c7f86ccffefdff3c4517a84005d9e0b1407024437a1497fbca5c4b43e3c1a39b"
+      pkg:    "5764418b2baa5281e4bfa545ca3b573da2de74a4517156c0c0edcace39746db7"
 # The apps. Each names its runtime FACTORY + the exact runtime line(s)
 # the legs stage (release channel only — run-artifacts stay a factory
 # debug channel). hello-ruby stages BOTH published ruby lines: one
