@@ -15,8 +15,10 @@
 #   lean  the four PATH tools + the install-time seed (registers the
 #         suite registry, installs the payload, warms its runtime into
 #         the machine home — the install-time prefetch; network at
-#         install). The rehearsal asserts the seed's effects, so a broken
-#         seed fails the leg, never a user machine.
+#         install). The seed runs DETACHED from postinstall (PackageKit's
+#         script budget must never kill a prefetch), logged to
+#         home/seed.log; the rehearsal polls for the seed's effects, so a
+#         broken seed fails the leg, never a user machine.
 #   fat   the self-contained pressed exe alone (carries the runtime pair
 #         — zero network at install or run). The pressed exe is UNSIGNED
 #         by construction (appended slots invalidate any prior
@@ -127,12 +129,11 @@ if [ "$COMPOSITION" = lean ]; then
   : "${BOOTSTRAP_REGISTRY:?install_pkg: BOOTSTRAP_REGISTRY unset (the lean composition seeds from it)}"
   : "${BOOTSTRAP_PAYLOADS:?install_pkg: BOOTSTRAP_PAYLOADS unset}"
   # The install-time seed (the template's web-bootstrapper contract):
-  # self-locating, idempotent, user-re-runnable; the postinstall runs it
-  # best-effort (a failed seed — an offline machine — never fails the
-  # install; the user re-runs it later). The warm loop dispatches each
-  # named shim once so its RUNTIME lands in the machine home at install
-  # time (the install-time prefetch — after a warm, a user's first
-  # dispatch is read-only against the root-owned home).
+  # self-locating, idempotent, user-re-runnable. It runs DETACHED from
+  # postinstall (PackageKit kills scripts that exceed its budget — a big
+  # runtime prefetch on a slow link must never fail the install): it warms
+  # in the background, logged to home/seed.log; a failed seed never fails
+  # the install, and the first user dispatch self-heals regardless.
   {
     echo '#!/bin/bash'
     echo "# $PRODUCT_NAME bootstrap seed — composed at build time; safe to re-run (tebako install is idempotent)."
@@ -157,10 +158,12 @@ if [ "$COMPOSITION" = lean ]; then
   mkdir -p "pkg-root$INSTALL_ROOT/home/shims"
   cat > build/bootstrap-hook <<EOF
 
-# --- install-time seed: best-effort — a failed seed (an offline machine)
-# never fails the install; the user re-runs it later.
+# --- install-time seed, detached: PackageKit kills postinstall scripts that
+# overrun its budget, so the network prefetch runs in the background (log:
+# $INSTALL_ROOT/home/seed.log). A failed seed never fails the install —
+# the first dispatch self-heals; the user may re-run the seed manually.
 printf '%s\n' "$INSTALL_ROOT/home/shims" >> "/etc/paths.d/$PRODUCT_NAME"
-"$INSTALL_ROOT/bootstrap-seed.sh" || echo "warning: the $PRODUCT_NAME payload seed failed (offline?) — re-run later: $INSTALL_ROOT/bootstrap-seed.sh" >&2
+nohup "$INSTALL_ROOT/bootstrap-seed.sh" > "$INSTALL_ROOT/home/seed.log" 2>&1 & disown
 EOF
   echo "bootstrap seed staged: registry $BOOTSTRAP_REGISTRY — payloads: $BOOTSTRAP_PAYLOADS; warm: ${BOOTSTRAP_WARM:-none}"
 else
@@ -237,21 +240,32 @@ case "$COMPOSITION" in
   lean)
     [ -x "$INSTALL_ROOT/bin/tebako" ] || die "$INSTALL_ROOT/bin/tebako missing after install"
     "$INSTALL_ROOT/bin/tebako" --version
-    # The seed ran during the install (the runner is networked): its
-    # effects are the rehearsal — registry registered, the payload
-    # cached into the machine home, the shims dir on PATH.
     [ -x "$INSTALL_ROOT/bootstrap-seed.sh" ] || die "bootstrap-seed.sh missing after install"
     grep -q "$INSTALL_ROOT/home/shims" "/etc/paths.d/$PRODUCT_NAME" || die "/etc/paths.d/$PRODUCT_NAME lacks the shims line"
-    [ -f "$INSTALL_ROOT/home/config.yaml" ] || die "the seed did not register the registry ($INSTALL_ROOT/home/config.yaml missing)"
-    for p in $BOOTSTRAP_PAYLOADS; do
-      [ -d "$INSTALL_ROOT/home/payloads/$p" ] || die "seed payload $p missing under $INSTALL_ROOT/home/payloads"
+    # The seed runs DETACHED at install time (PackageKit's script budget),
+    # so its effects land asynchronously — poll for them with a generous
+    # budget, and on timeout dump the seed log + the installer log (the
+    # runner is networked; a healthy seed lands in well under a minute).
+    deadline=$(( $(date +%s) + 900 ))
+    while :; do
+      seeded=1
+      [ -f "$INSTALL_ROOT/home/config.yaml" ] || seeded=0
+      for p in $BOOTSTRAP_PAYLOADS; do
+        [ -d "$INSTALL_ROOT/home/payloads/$p" ] || seeded=0
+      done
+      for w in ${BOOTSTRAP_WARM:-}; do
+        [ -x "$INSTALL_ROOT/home/shims/$w" ] || seeded=0
+        { [ -d "$INSTALL_ROOT/home/runtimes" ] && [ -n "$(ls -A "$INSTALL_ROOT/home/runtimes" 2>/dev/null)" ]; } || seeded=0
+      done
+      [ "$seeded" = 1 ] && break
+      if [ "$(date +%s)" -ge "$deadline" ]; then
+        echo "== the detached seed did not land within 900s — seed.log tail:"; sudo tail -30 "$INSTALL_ROOT/home/seed.log" 2>/dev/null || true
+        echo "== install.log tail:"; sudo grep -a "$PRODUCT_NAME" /var/log/install.log 2>/dev/null | tail -20 || true
+        die "the detached seed's effects did not land within 900s (forensics above)"
+      fi
+      sleep 5
     done
     for w in ${BOOTSTRAP_WARM:-}; do
-      # The warm dispatch cached the payload's RUNTIME at install time:
-      # the machine home is complete and a user's dispatch is read-only.
-      [ -d "$INSTALL_ROOT/home/runtimes" ] && [ -n "$(ls -A "$INSTALL_ROOT/home/runtimes")" ] \
-        || die "the warm set is bound but $INSTALL_ROOT/home/runtimes is empty — the install-time prefetch did not land"
-      [ -x "$INSTALL_ROOT/home/shims/$w" ] || die "$INSTALL_ROOT/home/shims/$w missing — the seed did not register the warmed shim"
       out="$(TEBAKO_HOME="$INSTALL_ROOT/home" "$INSTALL_ROOT/home/shims/$w")" \
         || die "the warmed shim $w did not dispatch"
       echo "$out"
