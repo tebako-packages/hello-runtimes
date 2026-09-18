@@ -335,7 +335,7 @@ jobs:
     # pkg legs rehearse the fat composition; this matrix re-widens the
     # day #486 ships in a tebako release.
     name: installer msi (${{ matrix.composition }})
-    needs: [plan]
+    needs: [plan, build]
     runs-on: windows-2022
     environment: windows-signing
     permissions:
@@ -578,7 +578,7 @@ jobs:
     # between the two signing gates — the fail-closed setup scripts are
     # part of the pinned installer source set.
     name: installer pkg (${{ matrix.composition }}, ${{ matrix.platform }})
-    needs: [plan]
+    needs: [plan, build]
     strategy:
       fail-fast: false
       matrix:
