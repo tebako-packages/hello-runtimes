@@ -11,7 +11,7 @@ version: "1.0.3"               # every payload in the suite versions together
 # trust-anchor pattern: a drifted byte is a pin mismatch, named).
 tools:
   repo: "tamatebako/tebako"
-  release: "v2.8.10"
+  release: "v2.8.11"
   sha256:
     linux-gnu-x86_64:
       tebako:    "bb6f6b34ca121c22f984dff8f50dd61ec6420b84b709cec1a4677ad42c8bef0a"
@@ -47,14 +47,14 @@ apps:
     engine: ruby
     factory: tamatebako/tebako-runtime-ruby
     runtimes:
-      - {version: "4.0.6",  tebako: "0.16.24", release: "v0.16.24"}
-      - {version: "3.3.12", tebako: "0.16.24", release: "v0.16.24"}
+      - {version: "4.0.6",  tebako: "0.16.27", release: "v0.16.27"}
+      - {version: "3.3.12", tebako: "0.16.27", release: "v0.16.27"}
     platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
   hello-python:
     engine: python
     factory: tamatebako/tebako-runtime-python
     runtimes:
-      - {version: "3.14.7", tebako: "0.2.0", release: "v0.2.0"}
+      - {version: "3.14.7", tebako: "0.2.4", release: "v0.2.4"}
     # The windows-ucrt leg waits on the factory: the windows python
     # runtime has no mount tier yet (its fs TU answers any mount with a
     # named exit 69), so a windows payload cannot execute on its own
