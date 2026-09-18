@@ -163,7 +163,7 @@ jobs:
         with:
           name: payload-${{ matrix.app }}-${{ matrix.triplet }}
           path: dist/
-          retention-days: 1
+          retention-days: 7
 
   slice-acceptance:
     # The extension-slice dispatch proof (spec 03 §2.8, spec 07 §2 step
@@ -570,7 +570,7 @@ jobs:
         with:
           name: installer-${{ matrix.composition }}-windows-ucrt64
           path: out/installers/
-          retention-days: 1
+          retention-days: 7
 
   installer-pkg:
     # The macOS pkg container for hello-ruby, one leg per (composition ×
@@ -693,7 +693,7 @@ jobs:
         with:
           name: installer-${{ matrix.composition }}-${{ matrix.platform }}
           path: out/installers/
-          retention-days: 1
+          retention-days: 7
 
   publish:
     if: ${{ always() && !cancelled() && inputs.publish && needs.build.result == 'success' && needs.installer-msi.result == 'success' && needs.installer-pkg.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
