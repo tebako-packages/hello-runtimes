@@ -4,41 +4,40 @@
 # The one-repo-per-package convention bends here by design — this is the
 # reference the docs walk through.
 name: hello-runtimes
-version: "1.0.2"               # every payload in the suite versions together
+version: "1.0.3"               # every payload in the suite versions together
 
 # The pinned tebako toolchain (tfs mkimage + tebako check/publish),
 # digest-pinned per platform against the release's own SHA256SUMS (the
 # trust-anchor pattern: a drifted byte is a pin mismatch, named).
 tools:
   repo: "tamatebako/tebako"
-  release: "v2.8.6"
+  release: "v2.8.10"
   sha256:
     linux-gnu-x86_64:
-      tebako: "f202f1853f469a23760b07f346a7b727d7c2c903548f25a67fa70ebdae140fb8"
-      tfs:    "8bc65286cf052b17aa6a95bbd277a06f3ab09c3df8b7d919ae9609085b9ed13e"
-      shim:   "9bacf97be8d80a847d3cb80a759327c0ac57b4de3cf7a4bad2626778c671cb3d"
-      pkg:    "59865eab57f8b7efb4e57236e9ea028725482a7d31a4ae9e96b7ea63a0459507"
+      tebako:    "bb6f6b34ca121c22f984dff8f50dd61ec6420b84b709cec1a4677ad42c8bef0a"
+      tfs:    "6dbd8a4daf44f47226968df2674b486ddf85736cdf0b6802f3287fec0457af17"
+      shim:    "873c2ae1ebef1bf5638d52cf8e79e2dcb972b32e5935edd405b53e427ec0e790"
+      pkg:    "1a02299d96ff320e8e596cb1310a329b656341aeb9a9410761a852e58e9bd41c"
     linux-gnu-arm64:
-      tebako: "68ba2fcd18d0401719011b08ccff6bc2cb50b1113c542c52062e36d065f849b0"
-      tfs:    "7ad59af2a65a16752cd6bb7318d4d6d0cae935e7349d901173bd327f979f90aa"
-      shim:   "b68a911e412b315a79a189f628f26096c1c43d4a9523e3749fe4afa6dc2081d7"
-      pkg:    "b6976ab284a04219ea937d406e6521e1acea6a1cda1c01a389dfd5d535fd67aa"
+      tebako:    "52e09caa9be7230822031ed4078e563b8d80b8c64cfb58e4172906c340e8cb20"
+      tfs:    "ac38cb79b44372b4d331c444b02b5f875511fe21738ce4e0f4cd3b5f14e5efdc"
+      shim:    "930fc761191db7919e71cd62817ba8ba80ba064152786fc37970db27aefe798f"
+      pkg:    "43dd8c623f21e2aede955fbf6bb6c72804c42e007b0433f8791b4ebe4dd68bdc"
     macos-x86_64:
-      tebako: "17e46a39eb05085276d92110932304e36034a23ac18b9b49907dc79779e8f546"
-      tfs:    "836386fb7bf5132d870eed1263ff894c6cf7f3d6b05539a82c9aaff2fda8da57"
-      shim:   "2b13797aefe90b26d51ac2463acdf63a924e3fa71579567fff9e8bf5ede0db52"
-      pkg:    "039801fcd8651404e188923eacd19688a3b1391bcf893aefeb3e1c1c0544bf5f"
+      tebako:    "8e984def0df8afb5104b02980bb6861dbb89cf448a70a664c38736333ba7da18"
+      tfs:    "73f5de494913b5df10535808db850af727cd552d125478eed6eb648e5f797cf4"
+      shim:    "b7e6e8522d954dc7712507169222a7dc9c119d52d2114505c7d50ad09ceb8970"
+      pkg:    "371580229ba6d4ad65c29a7e3dbe00aff3af29c09a63541bc62ed6e0c7331453"
     macos-arm64:
-      tebako: "ddf1f90941dc7357b13615f13c9671600663f047b284f9f0969114ce42288381"
-      tfs:    "61aa6baf640243cb6692c0470cb82da54e9c609cfd58fb410e7a31c6bbb41294"
-      shim:   "23d87399928fa534b421528e67b511723c758f0439f1ca3127b62e8248befd42"
-      pkg:    "49648f4ce2b7ad2e4ad1490eee1cf6e5902e0f47cf145b21beb7cd13b5b665b9"
+      tebako:    "ec709c86a10de76fa33f458c869142c23d71e2c2aaf0aecfa22c8582ab4db5d6"
+      tfs:    "26d170f0071623702bef9ff089d3d77040255fe3249680ea3758bfe1c2de443b"
+      shim:    "b82007a027f7f4e910a7dd9c0634a9dad3b3e6b3d66e604aac16a9d9e65b9222"
+      pkg:    "9cf3b408f4750da8db26b523b8ae45798cd6da50b218784b0ade362a6308ae0a"
     windows-ucrt64:
-      tebako: "a2721cd9a2f41eacfc93a6153c7c741d45c8d279bd7a0ea59aa7522a75511390"
-      tfs:    "375ef4328138225fde359830f564a606bb29e4ac0952c4843d04a937e64358a7"
-      shim:   "25a238e4f31d2e4865c93e67def08f225be06dd51b30a88bbe1e66664f86daea"
-      pkg:    "151ba56900295441f8bc95f61ae1be6b959df20281bb01bbcb311d6d7a0078f6"
-
+      tebako:    "2f7448405fb2ccf5e5bf7073c3dfa6d84d0d07bae0cecb895230cfc3ccc96c18"
+      tfs:    "05109f43c17aa994e44991732955bbe637ab7c139f219900a134cae047a599a2"
+      shim:    "615955c7ac30589b3af924d2fd298a3711ec078da9d0a690ebb00284a3c1545c"
+      pkg:    "e30e7ec8fb730a83025f7a0579abd92dc91039d6d0ff6a8f907cc294011c1a99"
 # The apps. Each names its runtime FACTORY + the exact runtime line(s)
 # the legs stage (release channel only — run-artifacts stay a factory
 # debug channel). hello-ruby stages BOTH published ruby lines: one
@@ -157,7 +156,7 @@ installers:
       files:
         templates/installers/windows/tebako.wxs: "f0de054645489620b647d09e37e09e03ea8c5ecaf894474fb78058a9eeac9a7a"
         templates/installers/macos/distribution.xml: "ef46ce5c9c560e38892ff1eecf48541d89648a891f61d6d11a7b02282801930a"
-        templates/installers/macos/scripts/postinstall: "863d3c80921ce086ce3b3c9a9a8bfc5391b4bd3d943da3b898a52aaa864533d7"
+        templates/installers/macos/scripts/postinstall: "ba0ac849a5ccd699f28a41e918917721c002f4612c00ef4926244b032658c4f8"
         ci/windows-sign-gate.sh: "1aaaa600558181d101c25db2de72d4094ff09da4da5a72d44ff0c1097913ad79"
         ci/macos-sign-setup.sh: "d92ca2e25bf0c540fdc82adc873e991d829a1058bbe82e3405fe2789b9301989"
         ci/macos-sign-setup-installer.sh: "38aaaf13410327764e3dadaa68d77ca541fd6e2a615c8823d7780bdcb926eb45"
