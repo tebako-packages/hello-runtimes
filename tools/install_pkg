@@ -138,6 +138,9 @@ if [ "$COMPOSITION" = lean ]; then
     echo '#!/bin/bash'
     echo "# $PRODUCT_NAME bootstrap seed — composed at build time; safe to re-run (tebako install is idempotent)."
     echo 'set -u'
+    echo '# The seed may run detached from a PackageKit sandbox whose cwd is torn down at'
+    echo '# install completion — never inherit a cwd (the shim dies on getcwd() otherwise).'
+    echo 'cd /'
     echo 'ROOT="$(cd "$(dirname "$0")" && pwd)"'
     echo 'export TEBAKO_HOME="$ROOT/home"'
     echo 'mkdir -p "$TEBAKO_HOME/shims"'
