@@ -687,7 +687,19 @@ jobs:
           APPLE_ASC_KEY_P8: ${{ secrets.APPLE_ASC_KEY_P8 }}
           APPLE_ASC_KEY_ID: ${{ secrets.APPLE_ASC_KEY_ID }}
           APPLE_ASC_ISSUER_ID: ${{ secrets.APPLE_ASC_ISSUER_ID }}
-        run: tools/install_pkg
+        # The rehearsal seed fetches the registry from api.github.com;
+        # the arm64 runner pool's shared IP quota exhausts hourly and the
+        # client's loud throttle backoff outlives the rehearsal window.
+        # A launchctl-set token reaches the PackageKit-spawned postinstall
+        # and its detached seed (the workflow env does not), is machine-
+        # scoped and cleared after — it never enters the pkg bytes.
+        run: |
+          set +e
+          sudo launchctl setenv GITHUB_TOKEN "${{ secrets.GITHUB_TOKEN }}"
+          tools/install_pkg
+          rc=$?
+          sudo launchctl unsetenv GITHUB_TOKEN 2>/dev/null || true
+          exit $rc
 
       # The rehearsal is the leg's verdict — when it fails, the pressed
       # exe itself is the evidence: upload it (always) so the trailer
