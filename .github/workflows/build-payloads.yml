@@ -701,20 +701,6 @@ jobs:
           sudo launchctl unsetenv GITHUB_TOKEN 2>/dev/null || true
           exit $rc
 
-      # The rehearsal is the leg's verdict — when it fails, the pressed
-      # exe itself is the evidence: upload it (always) so the trailer
-      # forensics run against the real bytes instead of a guess.
-      - name: Upload the fat exe forensics (always)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: fat-forensics-${{ matrix.composition }}-${{ matrix.platform }}
-          path: |
-            out/fat/
-            out/installers/
-          retention-days: 3
-          if-no-files-found: ignore
-
       - uses: actions/upload-artifact@v4
         with:
           name: installer-${{ matrix.composition }}-${{ matrix.platform }}
