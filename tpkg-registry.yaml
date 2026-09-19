@@ -57,7 +57,34 @@ payloads:
       constraint: '>= 3.3, < 5.0'
     entrypoints:
     - hello-ruby
-  default: '1.0.1'
+  - version: '1.0.3'
+    platforms:
+      aarch64-macos:
+        artifact: hello-ruby-1.0.3-macos-arm64.tfs
+        sha256: '46585d25bb31adc4747745163c7d1d4a87a3d45c10f2ac809eb2186ae47abf8d'
+      x86_64-macos:
+        artifact: hello-ruby-1.0.3-macos-x86_64.tfs
+        sha256: '09bc6a529ac6f6cca17e68d7f55ecb53a3b2f83eca3befee5f7af9192f5670a5'
+      x86_64-linux-gnu:
+        artifact: hello-ruby-1.0.3-linux-gnu-x86_64.tfs
+        sha256: '96c902465dd1e094b347a6150c3f8fed15301d949c14de034b40b099727729f8'
+      aarch64-linux-gnu:
+        artifact: hello-ruby-1.0.3-linux-gnu-arm64.tfs
+        sha256: ca0224c9ce6a3da78c2d163fe0119f02e4468bc62b7a9fedb655f6e42071adf5
+      x86_64-windows-ucrt:
+        artifact: hello-ruby-1.0.3-windows-ucrt64.tfs
+        sha256: eb6e8eb6dc356513c27c1e895afebec9b095e8cd19fe80459976e5d28b886ced
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.3
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-ruby-1.0.3-linux-gnu-x86_64.tfs.asc
+    runtime_requirement:
+      engine: ruby
+      constraint: '>= 3.3, < 5.0'
+    entrypoints:
+    - hello-ruby
+  default: '1.0.3'
 - name: hello-python
   kind: app
   versions:
@@ -109,7 +136,31 @@ payloads:
       constraint: '>= 3.13, < 4.0'
     entrypoints:
     - hello-python
-  default: '1.0.1'
+  - version: '1.0.3'
+    platforms:
+      aarch64-macos:
+        artifact: hello-python-1.0.3-macos-arm64.tfs
+        sha256: '4c8b84a20be5dcf55d59240595d7d25ea3f32ef953d12b853dabc81064ee31f3'
+      x86_64-macos:
+        artifact: hello-python-1.0.3-macos-x86_64.tfs
+        sha256: '5543b1b3dc4c714b025526e0ec6d172834edc4b4eccfc96133ea6517cf22c0dd'
+      x86_64-linux-gnu:
+        artifact: hello-python-1.0.3-linux-gnu-x86_64.tfs
+        sha256: '2f823152c850cd96e804abe6b8f3802c2a8a767bf5ddb4616b943dca9772bdf7'
+      aarch64-linux-gnu:
+        artifact: hello-python-1.0.3-linux-gnu-arm64.tfs
+        sha256: '35bda5c2d155c7d93a340cb66798d86fe7c9c5af8bddf315cc00d7d4a5c271ee'
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.3
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-python-1.0.3-linux-gnu-x86_64.tfs.asc
+    runtime_requirement:
+      engine: python
+      constraint: '>= 3.13, < 4.0'
+    entrypoints:
+    - hello-python
+  default: '1.0.3'
 - name: hello-java
   kind: app
   versions:
@@ -156,4 +207,98 @@ payloads:
       implementation: temurin
     entrypoints:
     - hello-java
-  default: '1.0.1'
+  - version: '1.0.3'
+    platforms:
+      aarch64-macos:
+        artifact: hello-java-1.0.3-macos-arm64.tfs
+        sha256: '9b897dc27f9a2cb12694fa25811f7097f6d4adc1a4b75f86e7cf05383897cf68'
+      x86_64-linux-gnu:
+        artifact: hello-java-1.0.3-linux-gnu-x86_64.tfs
+        sha256: '55bd3c183e8fea05b31f7728589ede707d3ce07717a8a4899cec83ef4caa5bee'
+      x86_64-windows-ucrt:
+        artifact: hello-java-1.0.3-windows-ucrt64.tfs
+        sha256: '12ce1e31ec444265dcf3530972989cd34a6e67e2bd628b5800a78dafe8b6e7a1'
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.3
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-java-1.0.3-linux-gnu-x86_64.tfs.asc
+    runtime_requirement:
+      engine: java
+      constraint: '>= 21'
+      implementation: temurin
+    entrypoints:
+    - hello-java
+  default: '1.0.3'
+- name: hello-flavor-acme
+  kind: toolkit
+  versions:
+  - version: '1.0.3'
+    platforms:
+      aarch64-macos:
+        artifact: hello-flavor-acme-1.0.3-macos-arm64.tfs
+        sha256: '3ed6373d3ed3522e694c39011aa92e7e9ed548a3cc3c8a71dfcd900a5245a807'
+      x86_64-macos:
+        artifact: hello-flavor-acme-1.0.3-macos-x86_64.tfs
+        sha256: '0d438ee3c28b70df1581fe18b4f1cab9f421714c5526b8046ff1c9ab43dc5189'
+      x86_64-linux-gnu:
+        artifact: hello-flavor-acme-1.0.3-linux-gnu-x86_64.tfs
+        sha256: '63292bc8f3918f8e2b9539e8435dc0834846c091c006992c7c0e578a9a1d0777'
+      aarch64-linux-gnu:
+        artifact: hello-flavor-acme-1.0.3-linux-gnu-arm64.tfs
+        sha256: '2fafe44da8308ecac57ba2e9b0c09c9da20d403a5406df7787bc6863443ff46e'
+      x86_64-windows-ucrt:
+        artifact: hello-flavor-acme-1.0.3-windows-ucrt64.tfs
+        sha256: a8e6703855f9edded67b791741b79e71724add468898e89af6546eeaef87aed8
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.3
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-flavor-acme-1.0.3-linux-gnu-x86_64.tfs.asc
+  default: '1.0.3'
+- name: hello-jruby
+  kind: app
+  versions:
+  - version: '1.0.3'
+    platforms:
+      aarch64-macos:
+        artifact: hello-jruby-1.0.3-macos-arm64.tfs
+        sha256: b3de61015d5bf8a7475a15f89510310166769fc2a4044f861ea4f1e2fab631f4
+      x86_64-linux-gnu:
+        artifact: hello-jruby-1.0.3-linux-gnu-x86_64.tfs
+        sha256: '84a9a4bafeceddce2f19c095fa2f211717a3e5a1fb0baf4a9b880a710a9a9f81'
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.3
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-jruby-1.0.3-linux-gnu-x86_64.tfs.asc
+    runtime_requirement:
+      engine: ruby
+      constraint: '>= 10, < 11'
+      implementation: jruby
+    entrypoints:
+    - hello-jruby
+  default: '1.0.3'
+- name: hello-truffleruby
+  kind: app
+  versions:
+  - version: '1.0.3'
+    platforms:
+      aarch64-macos:
+        artifact: hello-truffleruby-1.0.3-macos-arm64.tfs
+        sha256: '2a694ee22ddd61b4b4dfb1aff536de4bc10841c649d115a87d01d75d7e1c10bb'
+      x86_64-linux-gnu:
+        artifact: hello-truffleruby-1.0.3-linux-gnu-x86_64.tfs
+        sha256: f161e5a4f518acb92ba17dce35405e9d90b928262c401f8a2b34e92021a7fdbd
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.3
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-truffleruby-1.0.3-linux-gnu-x86_64.tfs.asc
+    runtime_requirement:
+      engine: ruby
+      constraint: '>= 34, < 35'
+      implementation: truffleruby
+    entrypoints:
+    - hello-truffleruby
+  default: '1.0.3'
