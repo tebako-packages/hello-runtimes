@@ -250,6 +250,7 @@ case "$COMPOSITION" in
     # budget, and on timeout dump the seed log + the installer log (the
     # runner is networked; a healthy seed lands in well under a minute).
     deadline=$(( $(date +%s) + 900 ))
+    foreground=0
     while :; do
       seeded=1
       [ -f "$INSTALL_ROOT/home/config.yaml" ] || seeded=0
@@ -262,9 +263,27 @@ case "$COMPOSITION" in
       done
       [ "$seeded" = 1 ] && break
       if [ "$(date +%s)" -ge "$deadline" ]; then
-        echo "== the detached seed did not land within 900s — seed.log tail:"; sudo tail -30 "$INSTALL_ROOT/home/seed.log" 2>/dev/null || true
-        echo "== install.log tail:"; sudo grep -a "$PRODUCT_NAME" /var/log/install.log 2>/dev/null | tail -20 || true
-        die "the detached seed's effects did not land within 900s (forensics above)"
+        if [ "$foreground" = 0 ]; then
+          foreground=1
+          # The detached seed authenticates api.github.com only if the
+          # launchd-propagated token reached it (best-effort on the shared
+          # arm64 runner pool); an unauthenticated read from that NAT IP
+          # is throttled for up to an hour and the honored-in-full backoff
+          # outlives this window. The seed is idempotent and re-runnable
+          # by design — re-run it FOREGROUND with the step's token handed
+          # through sudo explicitly, then give the effects one short poll.
+          echo "::notice::the detached seed did not land within 900s — re-running it in the foreground with the step's GITHUB_TOKEN"
+          sudo GITHUB_TOKEN="${GITHUB_TOKEN:-}" TEBAKO_GITHUB_TOKEN="${GITHUB_TOKEN:-}" \
+            "$INSTALL_ROOT/bootstrap-seed.sh" \
+            || { echo "== the foreground seed run failed — seed.log tail:"
+                 sudo tail -30 "$INSTALL_ROOT/home/seed.log" 2>/dev/null || true
+                 die "the foreground seed run failed (output above)"; }
+          deadline=$(( $(date +%s) + 120 ))
+        else
+          echo "== the seed's effects did not land even after a foreground run — seed.log tail:"; sudo tail -30 "$INSTALL_ROOT/home/seed.log" 2>/dev/null || true
+          echo "== install.log tail:"; sudo grep -a "$PRODUCT_NAME" /var/log/install.log 2>/dev/null | tail -20 || true
+          die "the seed's effects did not land (foreground run done; forensics above)"
+        fi
       fi
       sleep 5
     done

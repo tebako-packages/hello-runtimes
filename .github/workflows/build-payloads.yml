@@ -687,6 +687,10 @@ jobs:
           APPLE_ASC_KEY_P8: ${{ secrets.APPLE_ASC_KEY_P8 }}
           APPLE_ASC_KEY_ID: ${{ secrets.APPLE_ASC_KEY_ID }}
           APPLE_ASC_ISSUER_ID: ${{ secrets.APPLE_ASC_ISSUER_ID }}
+          # The step-env token is the deterministic path: when the
+          # detached seed's launchd-propagated token never arrived, the
+          # rehearsal re-runs the seed in the foreground with THIS one.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # The rehearsal seed fetches the registry from api.github.com;
         # the arm64 runner pool's shared IP quota exhausts hourly and the
         # client's loud throttle backoff outlives the rehearsal window.
