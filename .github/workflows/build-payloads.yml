@@ -913,9 +913,22 @@ jobs:
             [ -f "$f.asc" ] || { echo "::error::$f.asc missing — the container signing did not land"; exit 1; }
             upload+=("$f" "$f.asc")
           done
-          gh release upload "${{ github.ref_name }}" "${upload[@]}" --clobber
+          # Skip-if-current (tebako-runtime-ruby#189's wedge lesson): a
+          # deleted name 422-blocks re-uploads for hours. Installers are
+          # rebuilt bytes — same digest skips, drifted replaces (a
+          # single-asset replace is the probe-proven safe case).
+          for f in "${upload[@]}"; do
+            name="$(basename "$f")"
+            want="$(shasum -a 256 "$f" | cut -d' ' -f1)"
+            have="$(gh api "repos/tebako-packages/hello-runtimes/releases/tags/${{ github.ref_name }}" \
+              --jq ".assets[] | select(.name == \"$name\") | .digest" | sed 's/^sha256://')"
+            if [ "$have" = "$want" ]; then
+              echo "$name is already current on the release — skipping"
+            else
+              gh release upload "${{ github.ref_name }}" "$f" --clobber
+            fi
+          done
           echo "shipped ${#assets[@]} installer container(s) + .asc to ${GITHUB_REF_NAME}"
-
       - name: Registry default tracks the suite line
         # The suite versions together (Tebakofile): a publish moves every
         # payload's registry `default:` to the tag's version. `tebako
