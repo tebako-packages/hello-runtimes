@@ -38,6 +38,9 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  # OCI dual-publish (spec 38): the publish job's publish step pushes the
+  # payload artifacts to ghcr.io when the OCI_REPO variable is set.
+  packages: write
 
 jobs:
   plan:
@@ -729,6 +732,15 @@ jobs:
     if: ${{ always() && !cancelled() && inputs.publish && needs.build.result == 'success' && needs.installer-msi.result == 'success' && needs.installer-pkg.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
     needs: [plan, build, installer-msi, installer-pkg]
     runs-on: macos-latest
+    # A job-level block REPLACES the workflow-level grant, so every grant
+    # this job needs is restated here: contents + pull-requests for the
+    # release/registry-bot flow, packages for the ghcr.io dual-publish
+    # push (dropping it revokes the token's package scope and the push
+    # dies CredentialRequired).
+    permissions:
+      contents: write
+      pull-requests: write
+      packages: write
     defaults:
       run:
         shell: bash
@@ -835,6 +847,13 @@ jobs:
           # The upload rides the live GitHub API — the CLI wants its own
           # token spelling (job-level GH_TOKEN serves gh only).
           TEBAKO_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # OCI dual-publish destination (spec 38; repo variable — unset
+          # means dormant, the --oci flag is omitted byte-for-byte and the
+          # publish is unchanged). Activation: set OCI_REPO to
+          # tfs+oci://ghcr.io/tebako-packages/hello-runtimes once the ghcr
+          # package is public + repo-attached (the v2.8.24 tools pin
+          # carries publish --oci).
+          OCI_REPO: ${{ vars.OCI_REPO }}
         run: |
           set -euo pipefail
           TEBAKO_CLI="$PWD/.tools/tebako"
@@ -845,6 +864,22 @@ jobs:
           mkdir -p "$TEBAKO_HOME/keys"
           printf '%s\n' "$TEBAKO_SIGNING_KEY" > "$TEBAKO_HOME/keys/ci-signing.key"
           chmod 600 "$TEBAKO_HOME/keys/ci-signing.key"
+          # OCI dual-publish (spec 38 §11; dormant while OCI_REPO is unset):
+          # the SAME staged bytes ride the OCI repo, per-triplet tags derive,
+          # signatures follow as sha256-<hex>.asc sibling digest-tags, and
+          # the per-app registry rows gain the additive oci: mirror locator.
+          # The ghcr credential is the spec-38 §6 tier-3 docker-config auths
+          # entry (plain auth — credHelpers are the named refusal), minted
+          # from this job's own GITHUB_TOKEN and confined to ghcr.io.
+          OCI_ARGS=()
+          if [ -n "${OCI_REPO:-}" ]; then
+            mkdir -p ~/.docker
+            printf '{"auths":{"ghcr.io":{"auth":"%s"}}}\n' \
+              "$(printf '%s' "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" | base64 | tr -d '\n')" \
+              > ~/.docker/config.json
+            chmod 600 ~/.docker/config.json
+            OCI_ARGS=(--oci "$OCI_REPO")
+          fi
           mirror="$(mktemp -d)"
           for app in hello-ruby hello-python hello-java hello-flavor-acme hello-jruby hello-truffleruby; do
             # The composition apps verify under their isolated stores
@@ -872,8 +907,13 @@ jobs:
               --upload-mirror "$mirror"
             # 2. SHIP: authenticated API calls only (ensure-release +
             #    uploads). The mirror leg already proved the install —
-            #    the uploaded bytes are the same files.
-            env TEBAKO_HOME="$PUB_HOME" "$TEBAKO_CLI" publish --sign="$SIGNING_KEYID" --name "$app" \
+            #    the uploaded bytes are the same files. OCI_ARGS rides
+            #    THIS leg only: the ghcr push is an upload, so it ships
+            #    after the proof beside the release assets — never on the
+            #    zero-network PROVE leg (dormant while OCI_REPO is unset;
+            #    the ${arr[@]+...} guard keeps the empty expansion legal
+            #    under set -u).
+            env TEBAKO_HOME="$PUB_HOME" "$TEBAKO_CLI" publish --sign="$SIGNING_KEYID" "${OCI_ARGS[@]+"${OCI_ARGS[@]}"}" --name "$app" \
               --release "tfs:github:tebako-packages/hello-runtimes:${{ github.ref_name }}" \
               $args \
               --registry-out "$PWD/tpkg-registry.yaml" \
