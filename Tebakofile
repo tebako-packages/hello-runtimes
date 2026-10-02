@@ -11,33 +11,34 @@ version: "1.0.3"               # every payload in the suite versions together
 # trust-anchor pattern: a drifted byte is a pin mismatch, named).
 tools:
   repo: "tamatebako/tebako"
-  release: "v2.8.11"
+  release: "v2.8.24"           # v2.8.24 ships spec 38's publish --oci (the
+                               # dual-publish leg the OCI_REPO variable arms)
   sha256:
     linux-gnu-x86_64:
-      tebako:    "3ab7dbfa09d24b3acea20a47cc45f26f489b9a294dfabf1a9175a210d7432a55"
-      tfs:    "c3a5d8942028953c2f7f156f5ccdae1f4e8f1c43ae6942e242f9a00e0e8b7dc3"
-      shim:    "087c5dcb924cf3aa7cc6bc77015f80a5c08bacd901c7f392301fbefd5a952535"
-      pkg:    "f2b983af14c8293fcaa81d405ae5b127792e72f287a119a3272cbef230093ed3"
+      tebako:    "9618711295d785d7dfb32c00a74a40db32c0846eeaae4f18ffbaeab662e167bd"
+      tfs:    "3d99d9429fc156962bcd848747531a9b714947e28640fd1526388cc0d1eaca40"
+      shim:    "88afbd4d35ad74474c64d07a5dd4f4fb951c7225efa1636b12c05f126c838949"
+      pkg:    "67fd3e2ef272755ae4d58f99e83b665e7d29b9dda307f6772bb893d992785148"
     linux-gnu-arm64:
-      tebako:    "bf23db7597256a3c6518836480b957f23c2117f5af7c195df00fca4bc8e4e2c6"
-      tfs:    "90a905ee9d705bfcde6c439e9c15d790ba2ac4e1d235312caebfd269f3ac936d"
-      shim:    "f86f8e776b5f346aa146122d68e15934c7441505f36d74e8438dd4fd1de10f17"
-      pkg:    "2a4fd34e0d3a368b82f1cbdba44b2da1a493465cff3ac303a9ab31645ddb8a51"
+      tebako:    "4cb3a6a74bb2ae3c080465cffe8ef6a1b1d1cc064f8a600c998882f6ca044224"
+      tfs:    "513b46e68018fc80a8cdd0476dfe03f7a81ec6fa70c044fc73bf2315e51ea604"
+      shim:    "aec73db4dcec581719814e9cdc409fbdce9b1dc64d8cf3792439fa19544e049b"
+      pkg:    "01b1af75cfd3c3e8f7db1d30f3ebb4b9c7ebb9662fe96d329866e732d5661ffe"
     macos-x86_64:
-      tebako:    "baf62380e0d64158187477afeee2ba7e6a1e1207e74d6aa4cc56b8e54f3490ed"
-      tfs:    "19dc50c0e66b6a9b8c90316ad70b8074ab80855e07600836380fe0e5f98960cf"
-      shim:    "5280cde98410a1813f34b84c92d1562c9ea456a6174b48142e1ba993d4da0155"
-      pkg:    "b8c14237e0bbe2286380156d07fe4e7d4211d524ae4086463955e60827aba952"
+      tebako:    "8cd3766355eb122680fb7532e67bcadb7c92d2d31fba24cb2babdd8be1e005fa"
+      tfs:    "deb4a0a06f3933fdeea95d281585b0412004959a9d9db5589f98ee76a04855f0"
+      shim:    "0839ba5b4bb4b73738ce1b304219f00ce648adaf6644b29f5bf52be6b75a1ba1"
+      pkg:    "b8d64c4c08ab815a7fff6d72a5c730236729bdf674916241d5a6a71a10e12f4d"
     macos-arm64:
-      tebako:    "ef2a71996681056f90f35196f8e0ce9c24e825a19a0c735dac8194d4371462aa"
-      tfs:    "62203198ff485d6a51318176828a4f7e620b1ca98a1b57c000f19ce60f412470"
-      shim:    "5d4ff4454d1d4a28f0e2a60e4ae92d44931b29b53c662695deeec25abfd8f0ff"
-      pkg:    "9d7c7e3d826ea37d3dd74f394281ea9ad5a0fb52724adeec0378e4b999346a81"
+      tebako:    "9452007cd4a7a73df1288766b165a3cca96056b04794422c621eeb6a06944135"
+      tfs:    "6848433736969237df61c896787dd22508101ec186b103b34f3d6868c4a282f6"
+      shim:    "90cff0a64219a9e3d09b79780c0be3b85e8abac0c6a1766dddf9f6b8a4a743bf"
+      pkg:    "abcdd7141657793a8f5e0499902dc7b09113b82e92491e4098fb9b054d33154f"
     windows-ucrt64:
-      tebako:    "92c8ea49ae642c36fbdaefb115d8b1a335266b9daf46ccc4266e760580081983"
-      tfs:    "3f3b91920bdf6a8b9a6ec3f2a869cb055398e5c12a6ebfd950a80b8919289fe1"
-      shim:    "c7f86ccffefdff3c4517a84005d9e0b1407024437a1497fbca5c4b43e3c1a39b"
-      pkg:    "5764418b2baa5281e4bfa545ca3b573da2de74a4517156c0c0edcace39746db7"
+      tebako:    "ff6e2fb9ca469bafb7752a59ae608cd734009d4a56279efad5b7d401fa071fc6"
+      tfs:    "1552c0580669ab6c1edf48c70456156eb4177b22dfc7520d22a2f6e46f8a2b01"
+      shim:    "9725a16e579a2d89282aae2a67c2bb82569fafcbb4b3fdb0e668614eca66c5b1"
+      pkg:    "613d2c4ffe23b8defb4292a1cb8be401b3de30f115743951b9828cd0afab456b"
 # The apps. Each names its runtime FACTORY + the exact runtime line(s)
 # the legs stage (release channel only — run-artifacts stay a factory
 # debug channel). hello-ruby stages BOTH published ruby lines: one
@@ -154,7 +155,7 @@ installers:
     - repo: tamatebako/tebako
       ref: tools        # resolves to the tools.release tag
       files:
-        templates/installers/windows/tebako.wxs: "f0de054645489620b647d09e37e09e03ea8c5ecaf894474fb78058a9eeac9a7a"
+        templates/installers/windows/tebako.wxs: "b2f71eac8f4f1422f7c33ef0ade6a7f0c4ca489ec1c01a7d26fc0b267d78e366"
         templates/installers/macos/distribution.xml: "ef46ce5c9c560e38892ff1eecf48541d89648a891f61d6d11a7b02282801930a"
         templates/installers/macos/scripts/postinstall: "ba0ac849a5ccd699f28a41e918917721c002f4612c00ef4926244b032658c4f8"
         ci/windows-sign-gate.sh: "1aaaa600558181d101c25db2de72d4094ff09da4da5a72d44ff0c1097913ad79"

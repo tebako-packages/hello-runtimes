@@ -110,14 +110,8 @@ both compositions on every PR and push; the containers ship signed
 exactly on the owner-dispatched publish run (a disarmed signing plane
 rehearses unsigned and ships nothing).
 
-Two carries to know about, both tracked upstream:
+One carry to know about, tracked upstream:
 
-- `patches/tebako-wxs-bootstrap-wix5.patch` makes the pinned WiX
-  template's web-bootstrapper block compile under the pinned WiX v5
-  toolchain (the block is preprocessed out in the product's own
-  pipeline, so the compile errors surface only for a client binding
-  it — tamatebako/tebako#623). `tools/install_msi` applies it to a
-  working copy; the digest-verified template tree is never mutated.
 - The Windows fat MSI leg is gated off (its matrix entry carries the
   pointer) until tamatebako/tebako#486 ships: an alias-era runtime line
   makes a self-contained Windows press fail its boot on a duplicate
