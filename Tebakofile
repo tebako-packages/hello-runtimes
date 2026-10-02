@@ -155,7 +155,7 @@ installers:
     - repo: tamatebako/tebako
       ref: tools        # resolves to the tools.release tag
       files:
-        templates/installers/windows/tebako.wxs: "f0de054645489620b647d09e37e09e03ea8c5ecaf894474fb78058a9eeac9a7a"
+        templates/installers/windows/tebako.wxs: "b2f71eac8f4f1422f7c33ef0ade6a7f0c4ca489ec1c01a7d26fc0b267d78e366"
         templates/installers/macos/distribution.xml: "ef46ce5c9c560e38892ff1eecf48541d89648a891f61d6d11a7b02282801930a"
         templates/installers/macos/scripts/postinstall: "ba0ac849a5ccd699f28a41e918917721c002f4612c00ef4926244b032658c4f8"
         ci/windows-sign-gate.sh: "1aaaa600558181d101c25db2de72d4094ff09da4da5a72d44ff0c1097913ad79"
