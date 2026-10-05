@@ -11,34 +11,35 @@ version: "1.0.3"               # every payload in the suite versions together
 # trust-anchor pattern: a drifted byte is a pin mismatch, named).
 tools:
   repo: "tamatebako/tebako"
-  release: "v2.8.24"           # v2.8.24 ships spec 38's publish --oci (the
-                               # dual-publish leg the OCI_REPO variable arms)
+  release: "v2.8.25"           # v2.8.25 ships the dual-era runtime readers
+                               # (press honors the registry's release.ref —
+                               # the per-line shard catalog needs it)
   sha256:
     linux-gnu-x86_64:
-      tebako:    "9618711295d785d7dfb32c00a74a40db32c0846eeaae4f18ffbaeab662e167bd"
-      tfs:    "3d99d9429fc156962bcd848747531a9b714947e28640fd1526388cc0d1eaca40"
-      shim:    "88afbd4d35ad74474c64d07a5dd4f4fb951c7225efa1636b12c05f126c838949"
-      pkg:    "67fd3e2ef272755ae4d58f99e83b665e7d29b9dda307f6772bb893d992785148"
+      tebako:    "3599cdadcff89ab590385dec73227e01fd6dd3953723c0d86ffa443844ebbbeb"
+      tfs:    "9200cc0e6cd0773efd31b625ddaa38cac52aeb6e6ee1c8d94f146b64f396f587"
+      shim:    "11c91f803aeeb19812005cbaad7b1a69e1eaeea25fe79a03ee3556c17c43405d"
+      pkg:    "68391003fd3149630dd5141e76a0176de84bccbc96bf45e7379d561dab395949"
     linux-gnu-arm64:
-      tebako:    "4cb3a6a74bb2ae3c080465cffe8ef6a1b1d1cc064f8a600c998882f6ca044224"
-      tfs:    "513b46e68018fc80a8cdd0476dfe03f7a81ec6fa70c044fc73bf2315e51ea604"
-      shim:    "aec73db4dcec581719814e9cdc409fbdce9b1dc64d8cf3792439fa19544e049b"
-      pkg:    "01b1af75cfd3c3e8f7db1d30f3ebb4b9c7ebb9662fe96d329866e732d5661ffe"
+      tebako:    "eb1d54737da0b94e49e4c633b9be0e6c272fb499ac68475c659e1fd374e193d7"
+      tfs:    "bdda8863516c2c8f048353fcadf31016f34981672bb3c2dcb96235ddadc054a8"
+      shim:    "b20fc862e0bac69580a4c559fe65b66f809b66821c9c9314525f19706f132edd"
+      pkg:    "9d8d47ce40ff40e418a180e49463cc84e251bc3094f2ab51dc6b179d47eb87b0"
     macos-x86_64:
-      tebako:    "8cd3766355eb122680fb7532e67bcadb7c92d2d31fba24cb2babdd8be1e005fa"
-      tfs:    "deb4a0a06f3933fdeea95d281585b0412004959a9d9db5589f98ee76a04855f0"
-      shim:    "0839ba5b4bb4b73738ce1b304219f00ce648adaf6644b29f5bf52be6b75a1ba1"
-      pkg:    "b8d64c4c08ab815a7fff6d72a5c730236729bdf674916241d5a6a71a10e12f4d"
+      tebako:    "c9d2a1cc897af570d70bee32465d3223a174ebbd6cc383aac326dc0020727236"
+      tfs:    "962cf89e45a3ab08b41e2d5f8d7a6674646410717806afd45a3945aafadbc0b4"
+      shim:    "89e013ede2eb39cc29406919eff3f7bff17b9b96bcaaf3eb0c4b001c8ce3e54a"
+      pkg:    "ec4ce8c14944d0cc290c0ee1b2edb5a868a2aa9677deefec430f8cc38d1c2f30"
     macos-arm64:
-      tebako:    "9452007cd4a7a73df1288766b165a3cca96056b04794422c621eeb6a06944135"
-      tfs:    "6848433736969237df61c896787dd22508101ec186b103b34f3d6868c4a282f6"
-      shim:    "90cff0a64219a9e3d09b79780c0be3b85e8abac0c6a1766dddf9f6b8a4a743bf"
-      pkg:    "abcdd7141657793a8f5e0499902dc7b09113b82e92491e4098fb9b054d33154f"
+      tebako:    "372191bcea4b2ef3d14d2aaa722bf76cbdcb05e9ab33b8d152ae15916eae69c2"
+      tfs:    "5e70f0a7fed74c21b4a328272971472652bd5c0d3840f70091b3650e6842014e"
+      shim:    "bfbfb47344f9129d3ee41def67a92a354f1a1568feed095a4a578e977fbb5ceb"
+      pkg:    "e38d2746a1783885802ca8dc0ad479433e983515dfaae48f8fddbecebcfbf922"
     windows-ucrt64:
-      tebako:    "ff6e2fb9ca469bafb7752a59ae608cd734009d4a56279efad5b7d401fa071fc6"
-      tfs:    "1552c0580669ab6c1edf48c70456156eb4177b22dfc7520d22a2f6e46f8a2b01"
-      shim:    "9725a16e579a2d89282aae2a67c2bb82569fafcbb4b3fdb0e668614eca66c5b1"
-      pkg:    "613d2c4ffe23b8defb4292a1cb8be401b3de30f115743951b9828cd0afab456b"
+      tebako:    "ec7232da437d5b5220f06202b852355697f611e4eb56e587767b2ee19eeca3b3"
+      tfs:    "b97232c9292a44262bdf9cdb7ceb44abb2f2330f6885357e578376e1ed1e8176"
+      shim:    "473d7186e81a58271aeec882f98e82b246df3b6ea80341d65647299b358733be"
+      pkg:    "bb4bd8f911118615414a2bf64980b35b05f5d1eec4bd00465db622c3bd30f88d"
 # The apps. Each names its runtime FACTORY + the exact runtime line(s)
 # the legs stage (release channel only — run-artifacts stay a factory
 # debug channel). hello-ruby stages BOTH published ruby lines: one
