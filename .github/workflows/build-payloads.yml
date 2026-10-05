@@ -421,6 +421,8 @@ jobs:
 
       - name: Stage the pinned runtime (fat press input)
         if: matrix.composition == 'fat'
+        env:
+          GH_TOKEN: ${{ github.token }}
         # Same contract as the pkg legs: the press resolves the pair
         # through a file:// mirror of the pinned line's own tag — the
         # monolithic v<tebako> tag composition 404s in the shard era.
@@ -666,6 +668,8 @@ jobs:
 
       - name: Stage the pinned runtime (fat press input)
         if: matrix.composition == 'fat'
+        env:
+          GH_TOKEN: ${{ github.token }}
         # The press resolves the runtime pair through
         # TEBAKO_RUNTIME_MIRROR — a file:// mirror of the pinned factory
         # line's OWN tag (the Tebakofile's release: key). Without it the
