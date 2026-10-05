@@ -35,7 +35,11 @@
 #                  (the resolver fetches that spelling), and additionally
 #                  laid down under the facet's `install_as` PE name so the
 #                  mirror's exe runs where it lies (the interpreter import
-#                  resolves beside the exe).
+#                  resolves beside the exe). A shard's `bundle` facet (the
+#                  spec-36 co-published tar.gz the ≤0.16-era readers
+#                  select) is staged beside the per-file assets when
+#                  declared — a mirror that omits it fails the old-era
+#                  fetch with a named 404.
 #   run-artifacts  (pre-publish proof builds only) — `gh run download`
 #                  the factory's publish.yml (publish=false)
 #                  runtime-packages-* artifacts of the pinned run, verify
@@ -188,6 +192,7 @@ case "$CHANNEL" in
         abort("stage_runtime: #{ARGV[0]}: no image.filename field") unless s.dig("image", "filename")
         puts s["filename"], s["image"]["filename"]
         puts s["dll"]["filename"] if s.dig("dll", "filename")
+        puts s["bundle"]["filename"] if s.dig("bundle", "filename")
       ' "$REL_DL/$shard")
       # The declared OpenPGP sidecars (spec 09 §4): the shard owns the
       # .asc spellings; a declared signature must be fetchable or the
@@ -198,7 +203,7 @@ case "$CHANNEL" in
       done < <(ruby -rjson -e '
         $stdout.binmode
         s = JSON.parse(File.read(ARGV[0]))
-        puts s.dig("signature", "asc").to_s, s.dig("image", "signature", "asc").to_s, s.dig("dll", "signature", "asc").to_s
+        puts s.dig("signature", "asc").to_s, s.dig("image", "signature", "asc").to_s, s.dig("dll", "signature", "asc").to_s, s.dig("bundle", "signature", "asc").to_s
       ' "$REL_DL/$shard" | sed '/^$/d')
     done < "$SHARDS"
     ;;
@@ -263,21 +268,31 @@ if [ "$CHANNEL" = "release" ]; then
           abort("stage_runtime: dll facet of #{shard["filename"]} carries an unusable install_as (#{install_as.inspect}) — the PE name must be a bare file name")
         end
       end
+      # The spec-36 co-published bundle (the old-era tar.gz form):
+      # validated like every other facet — the dual-era readers select it
+      # for the ≤0.16 lines, so a mirror that omits it fails their fetch.
+      if (bundle = shard["bundle"])
+        checks["bundle sha256"] = [bundle["sha256"], sidecar.(bundle["filename"])]
+      end
       checks.each { |k, (got, want)| got == want or abort("stage_runtime: #{k} divergence: #{got.inspect} != #{want.inspect}") }
       puts shard["filename"], shard.dig("image", "filename"), shard.dig("dll", "filename").to_s, shard.dig("dll", "install_as").to_s, shard["abi"] || "-"
       # Trailing empty fields vanish under $() newline-stripping and the
       # read block would hit EOF (set -e, silent) — the abi idiom: `-`.
       asc = ->(v) { v.to_s.empty? ? "-" : v }
       puts asc.(shard.dig("signature", "asc")), asc.(shard.dig("image", "signature", "asc")), asc.(shard.dig("dll", "signature", "asc"))
+      puts asc.(shard.dig("bundle", "filename")), asc.(shard.dig("bundle", "signature", "asc"))
     ' "$REL_DL/$shard" "$stem" "$RT_TEBAKO" "$RT_V" "$host_of_stem")" || die "digest parity failed for $shard"
-    { IFS= read -r exe_asset; IFS= read -r img_asset; IFS= read -r dll_asset; IFS= read -r install_as; IFS= read -r abi; IFS= read -r exe_asc; IFS= read -r img_asc; IFS= read -r dll_asc; } <<< "$shard_fields"
+    { IFS= read -r exe_asset; IFS= read -r img_asset; IFS= read -r dll_asset; IFS= read -r install_as; IFS= read -r abi; IFS= read -r exe_asc; IFS= read -r img_asc; IFS= read -r dll_asc; IFS= read -r bundle_asset; IFS= read -r bundle_asc; } <<< "$shard_fields"
     [ "$exe_asc" = "-" ] && exe_asc=""
     [ "$img_asc" = "-" ] && img_asc=""
     [ "$dll_asc" = "-" ] && dll_asc=""
+    [ "$bundle_asset" = "-" ] && bundle_asset=""
+    [ "$bundle_asc" = "-" ] && bundle_asc=""
     [ "$abi" = "-" ] && abi=""
     # 2. The bytes against their .sha256 sidecars (the trust anchor) —
-    #    exe, env image, and the windows dll when the shard names one.
-    for asset in "$exe_asset" "$img_asset" ${dll_asset:+"$dll_asset"}; do
+    #    exe, env image, and the windows dll / co-published bundle when
+    #    the shard names them.
+    for asset in "$exe_asset" "$img_asset" ${dll_asset:+"$dll_asset"} ${bundle_asset:+"$bundle_asset"}; do
       [ -f "$REL_DL/$asset" ] && [ -f "$REL_DL/$asset.sha256" ] \
         || die "incomplete release download: missing $asset or $asset.sha256"
       want="$(cut -d' ' -f1 < "$REL_DL/$asset.sha256")"
@@ -290,12 +305,16 @@ if [ "$CHANNEL" = "release" ]; then
     cat "$REL_DL/$exe_asset.sha256" "$REL_DL/$img_asset.sha256" >> "$DEST/SHA256SUMS.txt"
     # Declared .asc sidecars ride verbatim — the resolver's spec 09 §4
     # guard refuses a mirror that declares a signature it cannot serve.
-    for sig in "$exe_asc" "$img_asc" ${dll_asc:+"$dll_asc"}; do
+    for sig in "$exe_asc" "$img_asc" ${dll_asc:+"$dll_asc"} ${bundle_asc:+"$bundle_asc"}; do
       if [ -n "$sig" ]; then
         [ -f "$REL_DL/$sig" ] || die "shard declares $sig but the download is missing it"
         cp "$REL_DL/$sig" "$DEST/"
       fi
     done
+    if [ -n "$bundle_asset" ]; then
+      cp "$REL_DL/$bundle_asset" "$REL_DL/$bundle_asset.sha256" "$DEST/"
+      cat "$REL_DL/$bundle_asset.sha256" >> "$DEST/SHA256SUMS.txt"
+    fi
     if [ -n "$dll_asset" ]; then
       cp "$REL_DL/$dll_asset" "$REL_DL/$dll_asset.sha256" "$DEST/"
       cat "$REL_DL/$dll_asset.sha256" >> "$DEST/SHA256SUMS.txt"
