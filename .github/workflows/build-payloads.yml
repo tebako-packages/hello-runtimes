@@ -877,10 +877,9 @@ jobs:
           TEBAKO_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # OCI dual-publish destination (spec 38; repo variable — unset
           # means dormant, the --oci flag is omitted byte-for-byte and the
-          # publish is unchanged). Activation: set OCI_REPO to
-          # tfs+oci://ghcr.io/tebako-packages/hello-runtimes once the ghcr
-          # package is public + repo-attached (the v2.8.24 tools pin
-          # carries publish --oci).
+          # publish is unchanged). The app name is appended per leg — the
+          # tag grammar carries only <version>-<triplet>, so each app
+          # publishes to its own sub-repository <OCI_REPO>/<app>.
           OCI_REPO: ${{ vars.OCI_REPO }}
         run: |
           set -euo pipefail
@@ -899,17 +898,22 @@ jobs:
           # The ghcr credential is the spec-38 §6 tier-3 docker-config auths
           # entry (plain auth — credHelpers are the named refusal), minted
           # from this job's own GITHUB_TOKEN and confined to ghcr.io.
-          OCI_ARGS=()
           if [ -n "${OCI_REPO:-}" ]; then
             mkdir -p ~/.docker
             printf '{"auths":{"ghcr.io":{"auth":"%s"}}}\n' \
               "$(printf '%s' "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" | base64 | tr -d '\n')" \
               > ~/.docker/config.json
             chmod 600 ~/.docker/config.json
-            OCI_ARGS=(--oci "$OCI_REPO")
           fi
           mirror="$(mktemp -d)"
           for app in hello-ruby hello-python hello-java hello-flavor-acme hello-jruby hello-truffleruby; do
+            # spec 38 §3's tag grammar is <version>-<triplet> — the payload
+            # NAME rides the repo path, so a suite pushes each app to its
+            # own sub-repository ($OCI_REPO/<app>). One shared path makes
+            # the apps' same-triplet tags collide (write-once, exit 69 —
+            # proven on this job's first 1.0.4 attempt).
+            OCI_ARGS=()
+            [ -z "${OCI_REPO:-}" ] || OCI_ARGS=(--oci "$OCI_REPO/$app")
             # The composition apps verify under their isolated stores
             # (the pins staged above); the CI signing key rides along.
             PUB_HOME="$TEBAKO_HOME"
