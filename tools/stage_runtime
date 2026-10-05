@@ -146,7 +146,11 @@ case "$CHANNEL" in
     # finds). Retried (a release-asset GET is a transient-prone edge
     # fetch), and a failure reports curl's error text plus a probe of the
     # status the URL actually answers — the CI log must name the failure
-    # mode.
+    # mode. The 1000-asset cap overflow convention
+    # (tebako-runtime-ruby#241): a per-line tag that overflowed keeps only
+    # its reader-essential files and archives the rest of the windows
+    # byte set on <tag>-windows — so a 404 on the pinned tag earns one
+    # retry against the archive tag before the failure is named.
     dl() {
       if [ ! -f "$REL_DL/$1" ]; then
         local err; err="$(mktemp)"
@@ -156,6 +160,14 @@ case "$CHANNEL" in
           local code
           code="$(curl -sSIL -o /dev/null -w '%{http_code}' \
             "https://github.com/$FACTORY_REPO/releases/download/$RELEASE_TAG/$1" 2>/dev/null || echo n/a)"
+          if [ "$code" = "404" ]; then
+            rm -f "$REL_DL/$1"
+            if curl -sS -L --fail --retry 3 --retry-delay 2 --retry-all-errors \
+                -o "$REL_DL/$1" \
+                "https://github.com/$FACTORY_REPO/releases/download/$RELEASE_TAG-windows/$1" 2>>"$err"; then
+              return 0
+            fi
+          fi
           die "release asset download failed: $1 (tag $RELEASE_TAG) — curl: $(cat "$err"); the URL answers: ${code:-n/a}"
         fi
       fi
