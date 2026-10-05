@@ -14,8 +14,8 @@
 #                  monolithic manifest.json / SHA256SUMS.txt are no longer
 #                  release assets. Shards are enumerated with
 #                  `gh release view --json assets` and selected on the
-#                  pin's EXACT version plus its variant suffixes
-#                  (^tebako-runtime-<tbver>-<pin>(-[a-z0-9]+)?-<hostid>\.manifest\.json$).
+#                  pin's EXACT version plus its variant suffixes, dual-
+#                  era (^tebako-runtime-<tbver>-(<engine>-)?<pin>(-[a-z0-9]+)?-<hostid>\.manifest\.json$).
 #                  Every staged byte is verified THREE ways: sidecar ↔
 #                  staged bytes ↔ the shard's own digest fields, plus the
 #                  filename identity (a divergence anywhere is a named
@@ -134,10 +134,18 @@ case "$CHANNEL" in
         || die "cannot enumerate $FACTORY_REPO release $RELEASE_TAG"
     fi
     re_escape() { printf '%s' "$1" | sed 's/[].[\*^$]/\\&/g'; }
+    # The engine name (the new-era shard grammar's <lang> infix) comes
+    # from the factory repo basename — openjdk's packages name it `java`.
+    ENGINE_HINT="${FACTORY_REPO##*/}"; ENGINE_HINT="${ENGINE_HINT#tebako-runtime-}"
+    [ "$ENGINE_HINT" = "openjdk" ] && ENGINE_HINT=java
     SHARDS="$REL_DL/.shards"
     : > "$SHARDS"
     for host_id in $HOST_IDS; do
-      re="^tebako-runtime-$(re_escape "$RT_TEBAKO")-$(re_escape "$RT_V")(-[a-z0-9]+)?-$(re_escape "$host_id")\.manifest\.json\$"
+      # Dual-era grammar (tebako#716): the ≤0.16-era shards spell
+      # tebako-runtime-<tb>-<lv>-<host>; the new era inserts the engine —
+      # tebako-runtime-<tb>-<lang>-<lv>-<host>. Accept both; the shard's
+      # own fields arbitrate (the parity check recomposes the stem).
+      re="^tebako-runtime-$(re_escape "$RT_TEBAKO")-($(re_escape "$ENGINE_HINT")-)?$(re_escape "$RT_V")(-[a-z0-9]+)?-$(re_escape "$host_id")\.manifest\.json\$"
       grep -E "$re" "$listing" >> "$SHARDS" || true
     done
     sort -u -o "$SHARDS" "$SHARDS"
@@ -156,6 +164,7 @@ case "$CHANNEL" in
     # byte set on <tag>-windows — so a 404 on the pinned tag earns one
     # retry against the archive tag before the failure is named.
     dl() {
+      local soft="${2:-}"
       if [ ! -f "$REL_DL/$1" ]; then
         local err; err="$(mktemp)"
         if ! curl -sS -L --fail --retry 3 --retry-delay 2 --retry-all-errors \
@@ -172,6 +181,7 @@ case "$CHANNEL" in
               return 0
             fi
           fi
+          if [ -n "$soft" ]; then rm -f "$REL_DL/$1"; return 1; fi
           die "release asset download failed: $1 (tag $RELEASE_TAG) — curl: $(cat "$err"); the URL answers: ${code:-n/a}"
         fi
       fi
@@ -192,18 +202,36 @@ case "$CHANNEL" in
         abort("stage_runtime: #{ARGV[0]}: no image.filename field") unless s.dig("image", "filename")
         puts s["filename"], s["image"]["filename"]
         puts s["dll"]["filename"] if s.dig("dll", "filename")
-        puts s["bundle"]["filename"] if s.dig("bundle", "filename")
       ' "$REL_DL/$shard")
+      # The co-published bundle (spec 36) is staged only when the release
+      # CARRIES it: the ≤0.16-era ruby tags co-publish it and the old-era
+      # readers select it (a declared-but-missing bundle there is fatal);
+      # the 0.17-era tags dropped it (the cap forced the trim — the
+      # per-file assets serve every new-era reader), so a 404 there is a
+      # skip with a note, never a failure.
+      bundle_name="$(ruby -rjson -e '$stdout.binmode; print JSON.parse(File.read(ARGV[0])).dig("bundle", "filename").to_s' "$REL_DL/$shard")"
+      if [ -n "$bundle_name" ]; then
+        if dl "$bundle_name" soft && dl "$bundle_name.sha256" soft; then
+          bundle_asc_name="$(ruby -rjson -e '$stdout.binmode; print JSON.parse(File.read(ARGV[0])).dig("bundle", "signature", "asc").to_s' "$REL_DL/$shard")"
+          [ -z "$bundle_asc_name" ] || dl "$bundle_asc_name" soft || rm -f "$REL_DL/$bundle_asc_name"
+        else
+          case "$RT_TEBAKO" in
+            0.16.*) die "bundle facet declared but the release carries no $bundle_name (tag $RELEASE_TAG) — the ≤0.16-era readers select it" ;;
+            *) echo "stage_runtime: note: $RELEASE_TAG carries no $bundle_name — this line's readers use the per-file assets (skipping the bundle facet)" ;;
+          esac
+          rm -f "$REL_DL/$bundle_name" "$REL_DL/$bundle_name.sha256"
+        fi
+      fi
       # The declared OpenPGP sidecars (spec 09 §4): the shard owns the
       # .asc spellings; a declared signature must be fetchable or the
       # resolver refuses the mirror (exit 71). Unsigned releases declare
-      # none and fetch none.
+      # none and fetch none. The bundle's .asc rides the soft path above.
       while IFS= read -r sig; do
         dl "$sig"
       done < <(ruby -rjson -e '
         $stdout.binmode
         s = JSON.parse(File.read(ARGV[0]))
-        puts s.dig("signature", "asc").to_s, s.dig("image", "signature", "asc").to_s, s.dig("dll", "signature", "asc").to_s, s.dig("bundle", "signature", "asc").to_s
+        puts s.dig("signature", "asc").to_s, s.dig("image", "signature", "asc").to_s, s.dig("dll", "signature", "asc").to_s
       ' "$REL_DL/$shard" | sed '/^$/d')
     done < "$SHARDS"
     ;;
@@ -246,7 +274,7 @@ if [ "$CHANNEL" = "release" ]; then
     #    shard carries none (jvm runtimes have no native-abi facet).
     shard_fields="$(ruby -rjson -e '
       $stdout.binmode
-      shard_path, stem, rt, lang_pin, host = ARGV
+      shard_path, stem, rt, lang_pin, host, engine = ARGV
       shard = JSON.parse(File.read(shard_path))
       dir = File.dirname(shard_path)
       sidecar = ->(a) { File.read(File.join(dir, "#{a}.sha256")).split.first }
@@ -258,8 +286,15 @@ if [ "$CHANNEL" = "release" ]; then
         "shard platform" => [shard["platform"], host],
         "shard exe sha256" => [shard["sha256"], sidecar.(shard["filename"])],
         "shard image sha256" => [shard.dig("image", "sha256"), sidecar.(shard.dig("image", "filename"))],
-        "stem recomposition" => ["tebako-runtime-#{shard["tebako_version"]}-#{lang}-#{shard["platform"]}", stem],
       }
+      # Dual-era stem grammar (tebako#716): the <=0.16 era spells
+      # tebako-runtime-<tb>-<lv>-<host>; the new era inserts the engine —
+      # tebako-runtime-<tb>-<engine>-<lv>-<host>. The stem must recompose
+      # under one of the two spellings (a factory rename or a wrong-line
+      # shard fails here loudly).
+      stems = ["tebako-runtime-#{shard["tebako_version"]}-#{lang}-#{shard["platform"]}",
+               "tebako-runtime-#{shard["tebako_version"]}-#{engine}-#{lang}-#{shard["platform"]}"].uniq
+      abort("stage_runtime: stem recomposition divergence: #{stem.inspect} matches neither #{stems.map(&:inspect).join(" nor ")}") unless stems.include?(stem)
       checks["shard #{vkeys.first}"] = [lang, lang_pin] unless lang == lang_pin || lang.start_with?("#{lang_pin}-")
       if (dll = shard["dll"])
         checks["dll sha256"] = [dll["sha256"], sidecar.(dll["filename"])]
@@ -269,19 +304,24 @@ if [ "$CHANNEL" = "release" ]; then
         end
       end
       # The spec-36 co-published bundle (the old-era tar.gz form):
-      # validated like every other facet — the dual-era readers select it
-      # for the ≤0.16 lines, so a mirror that omits it fails their fetch.
-      if (bundle = shard["bundle"])
-        checks["bundle sha256"] = [bundle["sha256"], sidecar.(bundle["filename"])]
-      end
+      # validated when the download landed (the release may not carry it
+      # on the 0.17-era tags — the soft path above skips it there).
+      bundle_file = shard.dig("bundle", "filename").to_s
+      have_bundle = !bundle_file.empty? && File.exist?(File.join(dir, "#{bundle_file}.sha256"))
+      checks["bundle sha256"] = [shard["bundle"]["sha256"], sidecar.(bundle_file)] if have_bundle
       checks.each { |k, (got, want)| got == want or abort("stage_runtime: #{k} divergence: #{got.inspect} != #{want.inspect}") }
       puts shard["filename"], shard.dig("image", "filename"), shard.dig("dll", "filename").to_s, shard.dig("dll", "install_as").to_s, shard["abi"] || "-"
       # Trailing empty fields vanish under $() newline-stripping and the
       # read block would hit EOF (set -e, silent) — the abi idiom: `-`.
       asc = ->(v) { v.to_s.empty? ? "-" : v }
       puts asc.(shard.dig("signature", "asc")), asc.(shard.dig("image", "signature", "asc")), asc.(shard.dig("dll", "signature", "asc"))
-      puts asc.(shard.dig("bundle", "filename")), asc.(shard.dig("bundle", "signature", "asc"))
-    ' "$REL_DL/$shard" "$stem" "$RT_TEBAKO" "$RT_V" "$host_of_stem")" || die "digest parity failed for $shard"
+      if have_bundle
+        basc = shard.dig("bundle", "signature", "asc").to_s
+        puts bundle_file, (!basc.empty? && File.exist?(File.join(dir, basc))) ? basc : "-"
+      else
+        puts "-", "-"
+      end
+    ' "$REL_DL/$shard" "$stem" "$RT_TEBAKO" "$RT_V" "$host_of_stem" "$ENGINE_HINT")" || die "digest parity failed for $shard"
     { IFS= read -r exe_asset; IFS= read -r img_asset; IFS= read -r dll_asset; IFS= read -r install_as; IFS= read -r abi; IFS= read -r exe_asc; IFS= read -r img_asc; IFS= read -r dll_asc; IFS= read -r bundle_asset; IFS= read -r bundle_asc; } <<< "$shard_fields"
     [ "$exe_asc" = "-" ] && exe_asc=""
     [ "$img_asc" = "-" ] && img_asc=""
