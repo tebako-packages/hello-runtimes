@@ -419,6 +419,19 @@ jobs:
           AZURE_SIGNING_CERT_PROFILE: ${{ vars.AZURE_SIGNING_CERT_PROFILE }}
         run: bash .install-src/ci/windows-sign-gate.sh
 
+      - name: Stage the pinned runtime (fat press input)
+        if: matrix.composition == 'fat'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Same contract as the pkg legs: the press resolves the pair
+        # through a file:// mirror of the pinned line's own tag — the
+        # monolithic v<tebako> tag composition 404s in the shard era.
+        run: |
+          RT_V="$RT_V" RT_TEBAKO="$RT_TEBAKO" RELEASE_TAG="$RELEASE_TAG" \
+            FACTORY_REPO="$FACTORY_REPO" HOST_IDS="$HOST_ID" \
+            MIRROR="$PWD/out/runtime-mirror" tools/stage_runtime
+          echo "TEBAKO_RUNTIME_MIRROR=file://$(cygpath -m "$PWD/out/runtime-mirror")" >> "$GITHUB_ENV"
+
       - name: Press the self-contained exe (fat composition)
         if: matrix.composition == 'fat'
         env:
@@ -652,6 +665,21 @@ jobs:
           APPLE_DEVELOPER_ID_INSTALLER_P12: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12 }}
           APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD }}
         run: bash .install-src/ci/macos-sign-setup-installer.sh
+
+      - name: Stage the pinned runtime (fat press input)
+        if: matrix.composition == 'fat'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # The press resolves the runtime pair through
+        # TEBAKO_RUNTIME_MIRROR — a file:// mirror of the pinned factory
+        # line's OWN tag (the Tebakofile's release: key). Without it the
+        # resolver composes the monolithic v<tebako> tag, which the
+        # per-line shard era retired (the fetch 404s, exit 124).
+        run: |
+          RT_V="$RT_V" RT_TEBAKO="$RT_TEBAKO" RELEASE_TAG="$RELEASE_TAG" \
+            FACTORY_REPO="$FACTORY_REPO" HOST_IDS="$HOST_ID" \
+            MIRROR="$PWD/out/runtime-mirror" tools/stage_runtime
+          echo "TEBAKO_RUNTIME_MIRROR=file://$PWD/out/runtime-mirror" >> "$GITHUB_ENV"
 
       - name: Press the self-contained exe (fat composition)
         if: matrix.composition == 'fat'
