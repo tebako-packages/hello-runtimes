@@ -131,7 +131,54 @@ payloads:
       constraint: '>= 3.3, < 5.0'
     entrypoints:
     - hello-ruby
-  default: '1.0.4'
+  - version: '1.0.5'
+    platforms:
+      aarch64-macos:
+        artifact: hello-ruby-1.0.5-macos-arm64.tfs
+        sha256: '6a743502f6320a57f8d3d6d321fd36672719575b99c06e8a0d253cdc8f554db2'
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-ruby:1.0.5-aarch64-macos
+        blksum:
+          filename: hello-ruby-1.0.5-macos-arm64.tfs.blksum.json
+          sha256: '1ce144e20d988603a94132e4ee22f942f96070a7aea31727512985729402c765'
+      x86_64-macos:
+        artifact: hello-ruby-1.0.5-macos-x86_64.tfs
+        sha256: '41272a29a7ea34b3b16f8829b9d053162ad046a6f0b4c18cd05160af3c2d57c5'
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-ruby:1.0.5-x86_64-macos
+        blksum:
+          filename: hello-ruby-1.0.5-macos-x86_64.tfs.blksum.json
+          sha256: '22f2cfcc99bae3de4c09746e2bdce231a4edb9bb48c0fc0d72bda312681adcd8'
+      x86_64-linux-gnu:
+        artifact: hello-ruby-1.0.5-linux-gnu-x86_64.tfs
+        sha256: c304725b7928e5d743b32bd831d03399383e6067ae3b44533773754c5ca7fca6
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-ruby:1.0.5-x86_64-linux-gnu
+        blksum:
+          filename: hello-ruby-1.0.5-linux-gnu-x86_64.tfs.blksum.json
+          sha256: '94be66622f076a7debf81fb79302a36a9963abe5fd00965b7007e074b6c8848f'
+      aarch64-linux-gnu:
+        artifact: hello-ruby-1.0.5-linux-gnu-arm64.tfs
+        sha256: b5a8fdb0fbaf64a98f78e5988b10cb5e12972294c5f509fb9eaf03296d528b4d
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-ruby:1.0.5-aarch64-linux-gnu
+        blksum:
+          filename: hello-ruby-1.0.5-linux-gnu-arm64.tfs.blksum.json
+          sha256: '12ad6ac757195626761c7ad623d2d8f486607b8fc82477965cb8305cf0593f99'
+      x86_64-windows-ucrt:
+        artifact: hello-ruby-1.0.5-windows-ucrt64.tfs
+        sha256: de328cd56b09b7b33d4e6ede56bc6f63250e1584ccafca0f4f41552dd37dcec9
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-ruby:1.0.5-x86_64-windows-ucrt
+        blksum:
+          filename: hello-ruby-1.0.5-windows-ucrt64.tfs.blksum.json
+          sha256: '5492b5e6eb9e2e64367b5a60c026d022985015b8646945b0804b6bd0dc223420'
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.5
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-ruby-1.0.5-linux-gnu-x86_64.tfs.asc
+    runtime_requirement:
+      engine: ruby
+      constraint: '>= 3.3, < 5.0'
+    entrypoints:
+    - hello-ruby
+  default: '1.0.5'
 - name: hello-python
   kind: app
   versions:
@@ -247,7 +294,47 @@ payloads:
       constraint: '>= 3.13, < 4.0'
     entrypoints:
     - hello-python
-  default: '1.0.4'
+  - version: '1.0.5'
+    platforms:
+      aarch64-macos:
+        artifact: hello-python-1.0.5-macos-arm64.tfs
+        sha256: '7273d500332f7a775e7a24a49fb799de0391ccc75160985ea9627d0a063d1e75'
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-python:1.0.5-aarch64-macos
+        blksum:
+          filename: hello-python-1.0.5-macos-arm64.tfs.blksum.json
+          sha256: '14579b0f5bd8334006b231c96a455a13d1b40d8202dfcca992d9f190f9b34d5e'
+      x86_64-macos:
+        artifact: hello-python-1.0.5-macos-x86_64.tfs
+        sha256: '9e202a93a15c6ca76a2595f44244ccceb8a39255e352739f00aabafe2d327b75'
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-python:1.0.5-x86_64-macos
+        blksum:
+          filename: hello-python-1.0.5-macos-x86_64.tfs.blksum.json
+          sha256: cc22c4406084935d7443dc5837b41e5ec462ff0bfdee9451ab4e6884e3f9678e
+      x86_64-linux-gnu:
+        artifact: hello-python-1.0.5-linux-gnu-x86_64.tfs
+        sha256: '5be941eb43601b2ea7b4fae03c40c928a5ce21f7d08e40661e164f133116f110'
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-python:1.0.5-x86_64-linux-gnu
+        blksum:
+          filename: hello-python-1.0.5-linux-gnu-x86_64.tfs.blksum.json
+          sha256: '1af03d02e2f19bec24e7821015115c806b0f458e0542f67638626475607bcf9f'
+      aarch64-linux-gnu:
+        artifact: hello-python-1.0.5-linux-gnu-arm64.tfs
+        sha256: '67cd3ba8ff40ab2f3664baaddd2fd7938e46c11fc99c982f47cb2a263f1e81a5'
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-python:1.0.5-aarch64-linux-gnu
+        blksum:
+          filename: hello-python-1.0.5-linux-gnu-arm64.tfs.blksum.json
+          sha256: '81a9d2764142c5b7930b5a3902de73ec2addaec2a7999a5878a8a0c38d5e2898'
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.5
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-python-1.0.5-linux-gnu-x86_64.tfs.asc
+    runtime_requirement:
+      engine: python
+      constraint: '>= 3.13, < 4.0'
+    entrypoints:
+    - hello-python
+  default: '1.0.5'
 - name: hello-java
   kind: app
   versions:
@@ -350,7 +437,41 @@ payloads:
       implementation: temurin
     entrypoints:
     - hello-java
-  default: '1.0.4'
+  - version: '1.0.5'
+    platforms:
+      aarch64-macos:
+        artifact: hello-java-1.0.5-macos-arm64.tfs
+        sha256: '5e8f06a6e3ed2eb8e815f32a809b54b358470443e45023745f02d6751b09ef43'
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-java:1.0.5-aarch64-macos
+        blksum:
+          filename: hello-java-1.0.5-macos-arm64.tfs.blksum.json
+          sha256: '1d43e141da0016f971c8653815e982d629c76ffae17064b197107c26a533d793'
+      x86_64-linux-gnu:
+        artifact: hello-java-1.0.5-linux-gnu-x86_64.tfs
+        sha256: '74cec4a09419035ec4902cdf68317d6b9eae000a70e79aed0bfc9aa305b47251'
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-java:1.0.5-x86_64-linux-gnu
+        blksum:
+          filename: hello-java-1.0.5-linux-gnu-x86_64.tfs.blksum.json
+          sha256: '45cacc9e37e29ef40dae66299836711366015f9feb82c524da915d1cd41903d2'
+      x86_64-windows-ucrt:
+        artifact: hello-java-1.0.5-windows-ucrt64.tfs
+        sha256: '0ec0dc5130531158bd24d6cec0ca7f96ad4eda2033d6ff1e21d5d4a86bc4ae3a'
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-java:1.0.5-x86_64-windows-ucrt
+        blksum:
+          filename: hello-java-1.0.5-windows-ucrt64.tfs.blksum.json
+          sha256: a22e7cfcca37fb11765fae405fe5ba57a2abf41fe44427e3ada28bace988d1a6
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.5
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-java-1.0.5-linux-gnu-x86_64.tfs.asc
+    runtime_requirement:
+      engine: java
+      constraint: '>= 21'
+      implementation: temurin
+    entrypoints:
+    - hello-java
+  default: '1.0.5'
 - name: hello-flavor-acme
   kind: toolkit
   versions:
@@ -418,7 +539,49 @@ payloads:
     signature:
       keyid: efc3c250f7862a48
       asc: hello-flavor-acme-1.0.4-linux-gnu-x86_64.tfs.asc
-  default: '1.0.4'
+  - version: '1.0.5'
+    platforms:
+      aarch64-macos:
+        artifact: hello-flavor-acme-1.0.5-macos-arm64.tfs
+        sha256: '190ec35e5776f5b643b932c2f639b7fd832c592a8c105ad2544e78f9fabd04e8'
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-flavor-acme:1.0.5-aarch64-macos
+        blksum:
+          filename: hello-flavor-acme-1.0.5-macos-arm64.tfs.blksum.json
+          sha256: be8ac2585df5b408a91f7237e7072fdf07d9b025cf19d3f0e833a73a34cfb730
+      x86_64-macos:
+        artifact: hello-flavor-acme-1.0.5-macos-x86_64.tfs
+        sha256: bf6904253941c23c7602872ca0ba65d8c1f1fd8503030c886b222abf9fb7dd3d
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-flavor-acme:1.0.5-x86_64-macos
+        blksum:
+          filename: hello-flavor-acme-1.0.5-macos-x86_64.tfs.blksum.json
+          sha256: e77382aa1f3f242436696a5fced192acd30da18ef90870fdf904d1cf50fc93bf
+      x86_64-linux-gnu:
+        artifact: hello-flavor-acme-1.0.5-linux-gnu-x86_64.tfs
+        sha256: ab60e8aa6fd037da7cf046eb9a97a738473588eb17cd2766eb85b4946577d08e
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-flavor-acme:1.0.5-x86_64-linux-gnu
+        blksum:
+          filename: hello-flavor-acme-1.0.5-linux-gnu-x86_64.tfs.blksum.json
+          sha256: ed00540ea57f0ff42fee0c9ecaa21a7e53a27a5f07e3955a0d2d59f7c982523b
+      aarch64-linux-gnu:
+        artifact: hello-flavor-acme-1.0.5-linux-gnu-arm64.tfs
+        sha256: d5b01b1ce95ccc752cee6178bcc406ea6a7e2f7018c07fde2562f2368279a453
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-flavor-acme:1.0.5-aarch64-linux-gnu
+        blksum:
+          filename: hello-flavor-acme-1.0.5-linux-gnu-arm64.tfs.blksum.json
+          sha256: '8f0c49fe5687c6688773b02f29a182421c7d605d172ea2332a1cf0a3d4ed7e13'
+      x86_64-windows-ucrt:
+        artifact: hello-flavor-acme-1.0.5-windows-ucrt64.tfs
+        sha256: '20717c8230a23c2aeeee5c6a354b5f0c429f0b37abe255f5a52c97dd75558f7c'
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-flavor-acme:1.0.5-x86_64-windows-ucrt
+        blksum:
+          filename: hello-flavor-acme-1.0.5-windows-ucrt64.tfs.blksum.json
+          sha256: '2ec701b1c0517499146844f7df1117cc4773e97961889460a05d3eda26c95880'
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.5
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-flavor-acme-1.0.5-linux-gnu-x86_64.tfs.asc
+  default: '1.0.5'
 - name: hello-jruby
   kind: app
   versions:
@@ -468,7 +631,34 @@ payloads:
       implementation: jruby
     entrypoints:
     - hello-jruby
-  default: '1.0.4'
+  - version: '1.0.5'
+    platforms:
+      aarch64-macos:
+        artifact: hello-jruby-1.0.5-macos-arm64.tfs
+        sha256: a5691a58915ed3b48b92edcddf4a3bba6afb55f894c1861135bacaaa73963043
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-jruby:1.0.5-aarch64-macos
+        blksum:
+          filename: hello-jruby-1.0.5-macos-arm64.tfs.blksum.json
+          sha256: '9d7085fcacb288a017b1bffd91418ada343830777d0e90e7d14b2dd4557e7324'
+      x86_64-linux-gnu:
+        artifact: hello-jruby-1.0.5-linux-gnu-x86_64.tfs
+        sha256: bfa44210dd4627724ea5efe36609256f247d048433dcf65b4665ecbd36645ba2
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-jruby:1.0.5-x86_64-linux-gnu
+        blksum:
+          filename: hello-jruby-1.0.5-linux-gnu-x86_64.tfs.blksum.json
+          sha256: b0dee3f8586021b0b6eab91927679e2743f5aa4554461aa8fd3c05752d6c7433
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.5
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-jruby-1.0.5-linux-gnu-x86_64.tfs.asc
+    runtime_requirement:
+      engine: ruby
+      constraint: '>= 10, < 11'
+      implementation: jruby
+    entrypoints:
+    - hello-jruby
+  default: '1.0.5'
 - name: hello-truffleruby
   kind: app
   versions:
@@ -518,4 +708,31 @@ payloads:
       implementation: truffleruby
     entrypoints:
     - hello-truffleruby
-  default: '1.0.4'
+  - version: '1.0.5'
+    platforms:
+      aarch64-macos:
+        artifact: hello-truffleruby-1.0.5-macos-arm64.tfs
+        sha256: '60044b6ef48b05a13010dfe05f8d54be007ec25a1bd6a6b17e373773f9e1533d'
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-truffleruby:1.0.5-aarch64-macos
+        blksum:
+          filename: hello-truffleruby-1.0.5-macos-arm64.tfs.blksum.json
+          sha256: '9fc4dda3ac6f277f224d8bfad5ab97e93bc76034dbc3a40fd50804979337ad15'
+      x86_64-linux-gnu:
+        artifact: hello-truffleruby-1.0.5-linux-gnu-x86_64.tfs
+        sha256: '6e8faf67c53bbc8a2e0540e0c736f4a364510a8a47cecd9b25ede5df918a87bf'
+        oci: tfs+oci://ghcr.io/tebako-packages/hello-truffleruby:1.0.5-x86_64-linux-gnu
+        blksum:
+          filename: hello-truffleruby-1.0.5-linux-gnu-x86_64.tfs.blksum.json
+          sha256: fc84f14a5cff40b26aaac2b88e2805c6d5654742ac41be2e3702e2a1297b4381
+    release:
+      ref: tfs:github:tebako-packages/hello-runtimes:1.0.5
+    signature:
+      keyid: efc3c250f7862a48
+      asc: hello-truffleruby-1.0.5-linux-gnu-x86_64.tfs.asc
+    runtime_requirement:
+      engine: ruby
+      constraint: '>= 34, < 35'
+      implementation: truffleruby
+    entrypoints:
+    - hello-truffleruby
+  default: '1.0.5'
