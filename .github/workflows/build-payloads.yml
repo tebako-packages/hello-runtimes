@@ -877,9 +877,11 @@ jobs:
           TEBAKO_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # OCI dual-publish destination (spec 38; repo variable — unset
           # means dormant, the --oci flag is omitted byte-for-byte and the
-          # publish is unchanged). The app name is appended per leg — the
-          # tag grammar carries only <version>-<triplet>, so each app
-          # publishes to its own sub-repository <OCI_REPO>/<app>.
+          # publish is unchanged). For this multi-payload suite OCI_REPO is
+          # the org-root PREFIX (tfs+oci://ghcr.io/tebako-packages); each
+          # app lands at <prefix>/<app> — the same flat per-payload grammar
+          # the single-payload feedstocks publish (their OCI_REPO is the
+          # full repository path, no suffix appended).
           OCI_REPO: ${{ vars.OCI_REPO }}
         run: |
           set -euo pipefail
@@ -908,10 +910,12 @@ jobs:
           mirror="$(mktemp -d)"
           for app in hello-ruby hello-python hello-java hello-flavor-acme hello-jruby hello-truffleruby; do
             # spec 38 §3's tag grammar is <version>-<triplet> — the payload
-            # NAME rides the repo path, so a suite pushes each app to its
-            # own sub-repository ($OCI_REPO/<app>). One shared path makes
-            # the apps' same-triplet tags collide (write-once, exit 69 —
-            # proven on this job's first 1.0.4 attempt).
+            # NAME rides the repo path, so each app gets its own flat
+            # repository ($OCI_REPO/<app>, e.g. ghcr.io/tebako-packages/
+            # hello-ruby — the same grammar metanorma/xml2rfc publish).
+            # One shared path for the suite would make the apps'
+            # same-triplet tags collide (write-once, exit 69 — proven on
+            # this job's first 1.0.4 attempt).
             OCI_ARGS=()
             [ -z "${OCI_REPO:-}" ] || OCI_ARGS=(--oci "$OCI_REPO/$app")
             # The composition apps verify under their isolated stores
