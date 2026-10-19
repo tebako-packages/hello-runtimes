@@ -825,7 +825,7 @@ jobs:
       - name: Stage the publish-verify mirror (each engine's first line)
         run: |
           set -euo pipefail
-          for app in hello-ruby hello-python hello-java; do
+          for app in hello-ruby hello-python hello-java hello-node hello-bun; do
             read -r rt_v rt_tb rt_rel < <(ruby tools/pins.rb --runtimes "$app" | head -1)
             RT_V="$rt_v" RT_TEBAKO="$rt_tb" RELEASE_TAG="$rt_rel" \
               FACTORY_REPO="$(ruby -ryaml -e "puts YAML.load_file('Tebakofile').dig('apps', '$app', 'factory')")" \
@@ -846,7 +846,7 @@ jobs:
           mkdir -p "$HOME/.tebako"
           {
             echo "runtimes:"
-            for app in hello-ruby hello-python hello-java; do
+            for app in hello-ruby hello-python hello-java hello-node hello-bun; do
               engine="$(ruby -ryaml -e "puts YAML.load_file('Tebakofile').dig('apps', '$app', 'engine')")"
               read -r rt_v rt_tb rt_rel < <(ruby tools/pins.rb --runtimes "$app" | head -1)
               printf '  %s: {version: "%s", tebako: "%s"}\n' "$engine" "$rt_v" "$rt_tb"
@@ -908,7 +908,7 @@ jobs:
             chmod 600 ~/.docker/config.json
           fi
           mirror="$(mktemp -d)"
-          for app in hello-ruby hello-python hello-java hello-flavor-acme hello-jruby hello-truffleruby; do
+          for app in hello-ruby hello-python hello-java hello-node hello-bun hello-flavor-acme hello-jruby hello-truffleruby; do
             # spec 38 §3's tag grammar is <version>-<triplet> — the payload
             # NAME rides the repo path, so each app gets its own flat
             # repository ($OCI_REPO/<app>, e.g. ghcr.io/tebako-packages/

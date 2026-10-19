@@ -12,6 +12,8 @@ both payload images and OS-native installers.
 | `hello-java` | tebako-runtime-openjdk | `>= 21`, flavor-pinned to `temurin` | linux-gnu x86_64, macOS arm64, windows-ucrt (the factory's three) |
 | `hello-jruby` | tebako-runtime-jruby | `>= 10, < 11`, implementation-pinned to `jruby` | linux-gnu x86_64, macOS arm64 (the factory's two) |
 | `hello-truffleruby` | tebako-runtime-truffleruby | `>= 34, < 35`, implementation-pinned to `truffleruby` | linux-gnu x86_64, macOS arm64 (jvm mode) |
+| `hello-node` | tebako-runtime-node | `>= 24`, implementation-pinned to `node` | linux-gnu ×2, macOS ×2, windows-ucrt |
+| `hello-bun` | tebako-runtime-bun | `>= 1.4`, implementation-pinned to `bun` | linux-gnu ×2, macOS ×2, windows-ucrt |
 
 ## Why this suite exists
 
@@ -39,6 +41,15 @@ dispatch path, or a signing surface regressed.
   compiles only their own code; the openjdk runtime is a JRE, so the jar
   with `args_default: ["-jar"]` is the payload form — spec 29 §1's own
   example shape). No tebako machinery ever compiles here.
+- **The first wrapper-exe JS engine arm.** `hello-node` rides the node
+  runtime pair (wrapper exe + env image) — the suite's first JavaScript
+  engine. The entry is a single-file, zero-dependency script copied
+  verbatim: the suite's established shape (no vendoring — the closure
+  proof belongs to real feedstocks).
+- **TS-native entry, zero compile.** `hello-bun`'s entry IS TypeScript
+  (`/app/cli.ts`): bun transpiles TS in-process at dispatch, so a typed
+  payload needs no compile step — no press-compile, no hosted tsc
+  (contrast the java arm's hosted-javac jar).
 - **Shard-model runtime staging.** `tools/stage_runtime` consumes the
   factories' per-leg shard releases (manifest shards + per-asset
   sidecars + `.asc`), verifies every staged byte three ways, and derives

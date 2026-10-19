@@ -1,0 +1,50 @@
+schema_version: 1
+# Payload manifest for hello-bun (spec 03 §2.2; filled by tools/build).
+identity:
+  schema_version: 1
+  kind: app
+  name: "hello-bun"
+  version: "@@VERSION@@"
+  producer: {tool: feedstock-build, tool_version: "1"}
+  created: "@@CREATED@@"                      # pinned at release time
+  source:
+    commit: "@@FEEDSTOCK_SHA@@"
+    builder: "@@BUILDER@@"                    # "gha:run:<id>" on CI builds
+  digest:
+    tree_hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"  # placeholder until the CAS lands (spec 03)
+    blob_sha256: "@@BLOB_SHA256@@"
+  signing: {state: unsigned}
+  encryption: {state: none}
+  annotations: {sample: hello-runtimes, runtime: bun}
+provides:
+  entrypoints:
+    - name: hello-bun
+      # The entry IS the TypeScript source; the wrapper composes
+      # [bun, /app/cli.ts, <user args…>] (spec 29 §1: the interpreter at
+      # index 0, args_default between it and the entry). Bun transpiles
+      # TS in-process — no compile step anywhere.
+      path: /app/cli.ts
+      args_default: []
+      # Pinned to the factory's own implementation (`bun` — spec 28 §8's
+      # implementation axis), hello-java's temurin rationale: a bare
+      # `engine: bun` edge resolves to the NEWEST satisfying runtime
+      # across every flavor the registries offer — the pin keeps the
+      # sample deterministic.
+      runtime_requirement:
+        engine: bun
+        implementation: bun
+        constraint: ">= 1.4"
+  platforms: []                   # filled by tools/build from the leg's
+                                  # triplet (the template stays parseable)
+  capabilities: {exec: true, read: true}
+requires:
+  - kind: language
+    engine: bun
+    implementation: bun
+    constraint: ">= 1.4"
+checks:
+  run:
+    entry: /app/cli.ts
+    argv: []
+    expect: {exit: 0}
+    timeout: 60
