@@ -54,6 +54,8 @@ case "$APP" in
   hello-java)        ENTRY=/app/hello.jar;  ENGINE=java ;;
   hello-jruby)       ENTRY=/app/hello.rb;   ENGINE=jruby ;;
   hello-truffleruby) ENTRY=/app/hello.rb;   ENGINE=truffleruby ;;
+  hello-node)        ENTRY=/app/cli.js;     ENGINE=node ;;
+  hello-bun)         ENTRY=/app/cli.ts;     ENGINE=bun ;;
   *) echo "boot_smoke: unknown APP: $APP" >&2; exit 1 ;;
 esac
 

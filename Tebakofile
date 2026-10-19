@@ -4,7 +4,7 @@
 # The one-repo-per-package convention bends here by design — this is the
 # reference the docs walk through.
 name: hello-runtimes
-version: "1.0.5"               # every payload in the suite versions together
+version: "1.0.6"               # every payload in the suite versions together
 
 # The pinned tebako toolchain (tfs mkimage + tebako check/publish),
 # digest-pinned per platform against the release's own SHA256SUMS (the
@@ -99,6 +99,23 @@ apps:
     # The truffleruby factory ships linux-gnu-x86_64 + macos-arm64 (jvm
     # mode) today.
     platforms: [x86_64-linux-gnu, aarch64-macos]
+  hello-node:
+    # The first wrapper-exe JS engine arm: the runtime pair dispatches
+    # node 24 LTS; the entry is plain JS, copied verbatim — nothing
+    # compiles.
+    engine: node
+    factory: tamatebako/tebako-runtime-node
+    runtimes:
+      - {version: "24.21.0", tebako: "2.8.22", release: "v2.8.22"}
+    platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
+  hello-bun:
+    # The TS-native headline: the entry IS TypeScript (/app/cli.ts) — bun
+    # transpiles it in-process at dispatch, no compile step anywhere.
+    engine: bun
+    factory: tamatebako/tebako-runtime-bun
+    runtimes:
+      - {version: "1.4.2", tebako: "2.8.22", release: "v2.8.22"}
+    platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
   hello-flavor-acme:
     # The reference EXTENSION slice (spec 03 §2.8): toolkit-kind content
     # that augments hello-ruby (the reverse edge is in its manifest, not
