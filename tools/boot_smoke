@@ -69,13 +69,29 @@ X="$(mktemp -d)"
 "$TFS" extract -d "$(nat "$X")" "$IMG"
 [ -f "$X${ENTRY}" ] || { echo "extracted entrypoint missing: $X$ENTRY"; exit 1; }
 
+echo "== the PATH trap (the hostile-interpreter guard)"
+# Any dispatch that resolves its interpreter through the host PATH is
+# a leak that must fail LOUDLY, not false-pass through whatever the
+# runner happens to carry. A scratch dir of hostile fakes goes first
+# on PATH for the check and the dispatch below: a leak runs a fake,
+# prints the canary, and exits 42; the happy path never consults PATH
+# (the wrapper execs its materialized twins by absolute path).
+TRAP_DIR="$(mktemp -d)"
+for name in node bun java ruby python python3 gem npm jruby truffleruby; do
+  printf '#!/bin/sh\necho "PATH-LEAK: %s executed from the host PATH" >&2\nexit 42\n' "$name" \
+    > "$TRAP_DIR/$name"
+  chmod +x "$TRAP_DIR/$name"
+done
+trap 'rm -rf "$TRAP_DIR"' EXIT
+TRAP_PATH="$TRAP_DIR:/usr/bin:/bin"
+
 echo "== spec 26 payload checks (tebako check, the press-time moment)"
 if [ -n "${OWNER_EXE:-}" ]; then
   echo "   skipped — an owner-composed runtime (the runtime-on-runtime
    composition) runs no single-runtime check: tebako check's grammar is
    one runtime + one image. The composition smoke below IS the check."
 else
-  "$TEBAKO" check "$IMG" --runtime "$RUNTIME" --runtime-image "$RUNTIME_IMAGE"
+  PATH="$TRAP_PATH" "$TEBAKO" check "$IMG" --runtime "$RUNTIME" --runtime-image "$RUNTIME_IMAGE"
 fi
 
 echo "== manual spec-17 dispatch smoke"
@@ -89,13 +105,13 @@ if [ -n "${OWNER_EXE:-}" ]; then
   OWNER_EXE="$(nat "$OWNER_EXE")"; OWNER_IMAGE="$(nat "$OWNER_IMAGE")"
   [ -e "$OWNER_EXE" ] || [ ! -e "$OWNER_EXE.exe" ] || OWNER_EXE="$OWNER_EXE.exe"
   [ -n "${OWNER_MOUNT:-}" ] || { echo "boot_smoke: OWNER_EXE set but OWNER_MOUNT unset"; exit 1; }
-  out="$(TEBAKO_RUNTIME_IMAGE="$OWNER_IMAGE" \
+  out="$(PATH="$TRAP_PATH" TEBAKO_RUNTIME_IMAGE="$OWNER_IMAGE" \
     "$OWNER_EXE" \
     "--tebako-image=$RUNTIME_IMAGE:-:$OWNER_MOUNT" \
     "--tebako-image=$IMG:-:/" \
     "--tebako-entry=$ENTRY")"
 else
-  out="$(TEBAKO_RUNTIME_IMAGE="$RUNTIME_IMAGE" \
+  out="$(PATH="$TRAP_PATH" TEBAKO_RUNTIME_IMAGE="$RUNTIME_IMAGE" \
     "$RUNTIME" "--tebako-image=$IMG:-:/" "--tebako-entry=$ENTRY")"
 fi
 echo "   $out"
