@@ -121,10 +121,18 @@ jobs:
             # The shard owns the exe/image asset spellings (factories
             # differ on the windows .exe suffix) — the staged pair's
             # literal names FLOW from the per-stem file; compose nothing.
-            stem="tebako-runtime-$rt_tb-$rt_v-$HOST_ID"
-            . "$MIRROR/v$rt_tb/$stem.stage.env"
+            # The stem likewise is the mirror's own: the engine segment
+            # (tebako#716) is the factory's naming choice, never the
+            # consumer's to spell — a re-composed stem names nothing that
+            # exists (the JS arms' first v2.8.47-line run died on exactly
+            # that: "…v2.8.47/tebako-runtime-2.8.47-24.22.0-…: No such
+            # file" while the mirror staged …-node-24.22.0-…).
+            stage_env=("$MIRROR/v$rt_tb"/*-"$HOST_ID".stage.env)
+            [ "${#stage_env[@]}" -eq 1 ] || { echo "the mirror staged ${#stage_env[@]} stage.env files for $HOST_ID (want exactly 1): ${stage_env[*]}"; exit 1; }
+            . "${stage_env[0]}"
             exe="$RUNTIME_EXE"
             img="$RUNTIME_IMAGE"
+            stem_manifest=("${stage_env[0]%.stage.env}.manifest.json")
             # The runtime-on-runtime composition (jruby/truffleruby): the
             # recipe's runtime line names its OWNER — stage the owner
             # line into the same mirror (its own tebako line's subdir,
@@ -135,9 +143,10 @@ jobs:
               echo "== owner: $ow_f $ow_v (tebako $ow_tb, $ow_rel)"
               RT_V="$ow_v" RT_TEBAKO="$ow_tb" RELEASE_TAG="$ow_rel" \
                 FACTORY_REPO="$ow_f" HOST_IDS="$HOST_ID" MIRROR="$MIRROR" tools/stage_runtime
-              ow_stem="tebako-runtime-$ow_tb-$ow_v-$HOST_ID"
-              . "$MIRROR/v$ow_tb/$ow_stem.stage.env"
-              ow_mount="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).fetch("on_runtime").fetch("mount")' "$MIRROR/v$rt_tb/$stem.manifest.json")"
+              ow_stage_env=("$MIRROR/v$ow_tb"/*-"$HOST_ID".stage.env)
+              [ "${#ow_stage_env[@]}" -eq 1 ] || { echo "the mirror staged ${#ow_stage_env[@]} owner stage.env files for $HOST_ID (want exactly 1)"; exit 1; }
+              . "${ow_stage_env[0]}"
+              ow_mount="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).fetch("on_runtime").fetch("mount")' "${stem_manifest[0]}")"
               owner_env=(OWNER_EXE="$RUNTIME_EXE" OWNER_IMAGE="$RUNTIME_IMAGE" OWNER_MOUNT="$ow_mount")
             fi
             # Native windows tools cannot read Git Bash's POSIX path
