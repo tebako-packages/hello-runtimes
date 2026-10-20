@@ -106,7 +106,10 @@ apps:
     engine: node
     factory: tamatebako/tebako-runtime-node
     runtimes:
-      - {version: "24.21.0", tebako: "2.8.22", release: "v2.8.22"}
+      # The 2.8.47 line: the factory pairs embed the launcher whose
+      # preload boot bridges the entry token (tebako#831's fix) — the
+      # POSIX legs' PATH-trap acceptance rides exactly this line.
+      - {version: "24.21.0", tebako: "2.8.47", release: "v2.8.47"}
     platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
   hello-bun:
     # The TS-native headline: the entry IS TypeScript (/app/cli.ts) — bun
@@ -114,7 +117,7 @@ apps:
     engine: bun
     factory: tamatebako/tebako-runtime-bun
     runtimes:
-      - {version: "1.4.2", tebako: "2.8.22", release: "v2.8.22"}
+      - {version: "1.4.2", tebako: "2.8.47", release: "v2.8.47"}
     platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
   hello-flavor-acme:
     # The reference EXTENSION slice (spec 03 §2.8): toolkit-kind content
