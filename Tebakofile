@@ -117,7 +117,7 @@ apps:
     engine: bun
     factory: tamatebako/tebako-runtime-bun
     runtimes:
-      - {version: "1.4.3", tebako: "2.8.48", release: "v2.8.48"}
+      - {version: "1.4.3", tebako: "2.8.47", release: "v2.8.47"}
     platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
   hello-flavor-acme:
     # The reference EXTENSION slice (spec 03 §2.8): toolkit-kind content
