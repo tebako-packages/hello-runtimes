@@ -127,6 +127,33 @@ run_rc() {
   grep -qF -- "$want" <<<"$out" || die "tebako $* — output misses «$want»: $out"
 }
 
+# run_wire_ok <ere> <args…>: run_ok PLUS the wire assertion — the first
+# fetch's transcript must NAME the wire it chose. Three spellings are
+# honest, and each is a different layer's answer: the lazy seed (a boot
+# tier that reads a seeded entry, on a release serving the wire), the
+# host-tier fallback (a tier that cannot — windows), and the
+# release-side fallback (a factory release that ships no blksum sidecar
+# yet). Silence or any fourth shape is the failure: a fetch must always
+# say which wire it took.
+run_wire_ok() {
+  local want="$1"; shift
+  local out rc
+  set +e
+  out="$(PATH="$TRAP_PATH" "$TEBAKO" "$@" 2>&1)"
+  rc=$?
+  set -e
+  printf '%s\n' "$out"
+  [ "$rc" -eq 0 ] || die "tebako $* — exit $rc (want 0)"
+  grep -qE -- "$want" <<<"$out" || die "tebako $* — output misses /$want/: $out"
+  ! grep -q "PATH-LEAK" <<<"$out" || die "tebako $* — a host PATH interpreter answered (PATH-LEAK)"
+  case "$out" in
+    *"lazy: seeding on demand"*) ;;
+    *"cannot install lazily"*) ;;
+    *"does not serve the lazy wire"*) ;;
+    *) die "tebako $* — the first fetch named no wire: $out" ;;
+  esac
+}
+
 # The hostile-PATH trap (the suite's boot_smoke pattern): any dispatch
 # that resolves its interpreter through the host PATH must fail LOUDLY —
 # a leak runs a fake, prints the canary, and the assertion dies. Scoped
@@ -153,27 +180,30 @@ say "store config: the seven factory registries; the temurin pin rides the env l
 cat "$HOME_LOCAL/config.yaml"
 export TEBAKO_JAVA_VERSION="21.0.12"
 
-say "engine: ruby (bare form — the interpreter)"
-run_ok '^ruby [0-9]' run ruby --version
+# The lazy wire is the default (spec 39's flip); the arm states it
+# EXPLICITLY so a future default change cannot silently un-assert the
+# wire, and asserts the transcript per engine below.
+export TEBAKO_RUNTIME_LAZY=1
+
+say "engine: ruby (bare form — the interpreter, and the wire it chose)"
+run_wire_ok '^ruby [0-9]' run ruby --version
 say "engine: ruby (bare + gem — the v0.17.2 spawn surface)"
 run_ok '^[0-9]+\.' run ruby:gem --version
 
-say "warm: eager installs — the lazy DEMAND-READ is gated (tebako#851)"
-# Two independent reasons the arm installs eagerly:
-#  1. The lazy DEMAND-READ during interpreter boot hangs pending
-#     tebako#851 (the fetch's resolver re-enters the interposed surface
-#     behind the VFS read lock). The lazy arm returns when #851 closes.
-#  2. Windows' materialize tier extracts host trees from the image FILE,
-#     so its driver refuses a LAZY_SEEDING env image by name.
-# Eager is the explicit pre-stage the install path performs; the gate is
-# this notice plus the issue, never a silent skip.
-export TEBAKO_RUNTIME_LAZY=0
+say "warm: the lazy wire — the first fetch seeds on demand (tebako#851 closed)"
+# The first fetch of each engine IS the acceptance of the wire the HOST
+# can boot: a POSIX tier seeds the env image on demand and serves the
+# interpreter's stdlib through the seeded mount; a tier that extracts a
+# host tree from the image file (windows) takes the LOUD eager fallback
+# by design (tebako#853) — never a refusal, never a hang. The transcript
+# line the fetch prints is asserted per engine below.
 
 say "engine: python (bare form — a REAL stdlib import, not --version)"
 # --version exits before any stdlib import and is therefore a vacuous
 # probe: it passed while a LAZY_SEEDING env image served no stdlib at all
-# (tamatebako/tebako#848). The import is the acceptance.
-run_ok '^encodings$' run python -c "import encodings; print(encodings.__name__)"
+# (tamatebako/tebako#848). The import is the acceptance — and on a POSIX
+# tier it is served through the SEEDED mount (the wire assertion).
+run_wire_ok '^encodings$' run python -c "import encodings; print(encodings.__name__)"
 # The v0.3.1+ spawn surface, and the entry dispatch over the same store.
 run_ok '^pip [0-9]' run python:pip --version
 

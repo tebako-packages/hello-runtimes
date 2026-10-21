@@ -4,46 +4,52 @@
 # The one-repo-per-package convention bends here by design — this is the
 # reference the docs walk through.
 name: hello-runtimes
-version: "1.0.10"               # every payload in the suite versions together
+version: "1.0.11"               # every payload in the suite versions together
 
 # The pinned tebako toolchain (tfs mkimage + tebako check/publish),
 # digest-pinned per platform against the release's own SHA256SUMS (the
 # trust-anchor pattern: a drifted byte is a pin mismatch, named).
 tools:
   repo: "tamatebako/tebako"
-  release: "v2.8.53"           # v2.8.53 carries the lazy mount at both TFS
-                               # layers (tebako#848): the preload shim
-                               # state-detects a LAZY_SEEDING env image, so a
-                               # fresh lazy line serves the interpreter's
-                               # stdlib. v2.8.52 carried the install-seal
-                               # (tebako#843) and doctor (tebako#846) fixes;
-                               # the surface itself ships from v2.8.50
+  release: "v2.8.55"           # v2.8.55 is the host-gated lazy wire
+                               # (tebako#853): the fetch planner refuses to
+                               # seed a boot tier that cannot read a seeded
+                               # entry (windows takes the loud eager
+                               # fallback), and the payload edge seals a
+                               # lazy runtime before reading its manifest.
+                               # It rides v2.8.54's transport window
+                               # (tebako#851 — the fix lives in the RUNTIME's
+                               # preload, so the runtimes are repinned with
+                               # it), v2.8.53's dual-layer lazy mount
+                               # (tebako#848), and v2.8.52's install-seal +
+                               # doctor fixes; the surface itself ships from
+                               # v2.8.50
   sha256:
     linux-gnu-x86_64:
-      tebako:    "e8cdd2ee2407330de788722e1f434a57c365a2395ccb5f33df81fbf55330508f"
-      tfs:    "a9ed72f257af54ee6845db9fd599948e1d6da1717f236609d094af675af919a6"
-      shim:    "fcb97f881b5b59b87be4fd79fd5f2996b230ba82b51adfca5a56eaa3800808be"
-      pkg:    "c0bc66a3a5410715e5984c9e70aa7920eefcabcf24ba029a96b3c540e4c9c364"
+      tebako:    "117612ed8913bcaa3bcb83ec936080077a72987ff5e095cac2575f431876ca89"
+      tfs:    "c1fee608305b4a7377a76ceb24e7ac313f32343a7898b06544f17b6c72b0b8d9"
+      shim:    "f069fd722f718bf6e498953ad2afa10be5270a05425aff1c50fcacdd7aa577e6"
+      pkg:    "041a86e5fb8c524e64bcb3f95f9c5c8ae61f0deb439b4e83f69a30d9ea3d61fa"
     linux-gnu-arm64:
-      tebako:    "b01ed98ba993112a251c065719bb20c9e730a03c2f52c6a16ab08277768aea10"
-      tfs:    "69838a11b86a306614a3ae9ce03165c2350ad937e2346b85cfba1cc246efea69"
-      shim:    "3c249c202a47e15525638f06be0996ecaa427608c199c2dca23b6e3a5c107a15"
-      pkg:    "10420b6e31599b2553a82d76d8a4decbdef9d41c393d292933b09a266024ceaf"
+      tebako:    "c31df4e8b569a4d428548a9331138f4d2e17b0c2193ab8d28eedce02cfd67e77"
+      tfs:    "315fb51898af1d4b4e5a1d5e7a6d362baa773fec26f469af0d890536bed396b4"
+      shim:    "339ac16be9a8085b14071fd302004e1aa7902bfe831bb5e7090849ea8f505841"
+      pkg:    "8f88a10c92744ac7fbf4fcde2cdd5bb4212b986db2936e2f3d6d343b106b4fd8"
     macos-x86_64:
-      tebako:    "9d5f4a915ed5cffa6f2a037ae39b251a5b35327b63a13b1edb57543a985b6d19"
-      tfs:    "291dc55479505b5dd17d6e3b11f4a4f23e5eb1a4d050906d4b3910508037b9d8"
-      shim:    "31cd65a470c319f2f17765ae0d7901521efd300776ca2c16fc6bc741fb0e585a"
-      pkg:    "95a6d79ff3ad8c7dfc53036f96ac1a7f9f42de41076819d0221bc6ae5b642a7e"
+      tebako:    "e97258a64a2976fc4b89054d50c49ae0b52f4ff12d66ae9222ce6381dcd99f2e"
+      tfs:    "ddcbab5d963654f4b947cc1ced363f928b8889ae3decaf1df2da433332ad5275"
+      shim:    "8b5ef9989fc6a02da806f94277bfe40f2d1df711adab643c63adf50b8318fdf6"
+      pkg:    "1766bde62a2e42f3df31b2c5b0c5b9a6ec9c3fda67b140414d0884b3424b38fb"
     macos-arm64:
-      tebako:    "32feb7f6119021824190bc5c02cdf9b7a492c3d42b2b9e738c32e01e49612af9"
-      tfs:    "ed4fe364b619a64a10f27ca51cc261b82812f3fc6e9a857f411a38166139667f"
-      shim:    "4a982d2e3c8fa4e62cd13770800b95950b515d5ee1f86cf8ae27edde6447587d"
-      pkg:    "133b87953fbb3a3a9f1bf985d0b6466ab404cfd2e17324631425a1a73ed52765"
+      tebako:    "a82bc4fc9a61a296f57ac7739750297886858cc1f660aebef83ac7457ba87275"
+      tfs:    "d733f911b0a3092141fc2d6ebaa962aae50ca3069ac2d98accd58e23b116ac1e"
+      shim:    "bea764b6199f1b042e1b908f763b62d1b20256a37598c0d8e138827707d6e9d8"
+      pkg:    "ed7c4ecb0899acd5c1fa40ddf980c6520305be2225f8737b7f5d18e3b1bd610b"
     windows-ucrt64:
-      tebako:    "da4dc05810ce55d7b0b24ea2b510e1401c1507f4151a0fa93a7c9516cbec49cf"
-      tfs:    "a587b75a782e2c1e32b67c2e61dcd0ef67590903075e557b67ebeb4bf4985b99"
-      shim:    "87d9d171e52a28fa119add626c541ac62567a444edd57f3ef85a1b5178ee8158"
-      pkg:    "c34eaecab203ef925fa92974d681f0a996dd495239f23d4438b31481e1b2c5e9"
+      tebako:    "e9d250e5cd8bdd2f184a767af38b3c5e9cd07f555a6f6e3d18fb1ee83085f65b"
+      tfs:    "e9984f7dc40ebd72a24e992f585b2ef5a67c6515a9f3f1d34e8fbaaa82f55a43"
+      shim:    "1ea2d6664959c164f0ec28b65e85cd32970f287ada17031ca814e576b331bc9e"
+      pkg:    "15e65e72572515676b1866e41b4191d6410a439c86a3d84eda13eaf653d08e1e"
 # The apps. Each names its runtime FACTORY + the exact runtime line(s)
 # the legs stage (release channel only — run-artifacts stay a factory
 # debug channel). hello-ruby stages BOTH published ruby lines: one
@@ -60,7 +66,7 @@ apps:
     engine: python
     factory: tamatebako/tebako-runtime-python
     runtimes:
-      - {version: "3.14.7", tebako: "0.3.2", release: "v0.3.2"}
+      - {version: "3.14.7", tebako: "0.3.3", release: "v0.3.3"}
     # The windows-ucrt leg still waits on the payload mount tier: the
     # pair is now self-contained (v0.3.2's static gettext) and the engine
     # surface exercises its boot under the hostile PATH, but a windows
