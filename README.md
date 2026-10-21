@@ -67,6 +67,17 @@ dispatch path, or a signing surface regressed.
 - **Signed publish.** On a tag, the publish job signs every payload with
   the tamatebako CI signing subkey and lands the registry by bot PR
   (main is protected).
+- **The runtime-own command surface.** The `engine-surface` job (one leg
+  per platform) exercises spec 07 §10 against the factories' published
+  runtimes: `tebako run <engine>` / `<engine>:<command>` for ruby,
+  python, java, node, and bun, resolved against the factory registries
+  the leg configures (no default registry exists); the named errors
+  (`nosuchengine` → 69, `java:nosuch` → 65); and the shim surface
+  (`tebako install <engine>`, dispatch through the registered shim,
+  `shim list` / `doctor` answering the runtime-own class).
+  jruby/truffleruby are deliberate skip gates — their factory registries
+  carry no `engine:` discovery key today, so the engine surface answers
+  69 by design; the gate flips red when a factory renders the key.
 
 ## Layout
 
@@ -77,11 +88,13 @@ dispatch path, or a signing surface regressed.
   against the release's own SHA256SUMS), per-app runtime lines,
   platforms, CI hosts, signing keyid.
 - `tools/` — `pins.rb` (recipe → CI matrix/env/payload-args) /
-  `stage_runtime` / `build` / `boot_smoke` / `registry_default` / the
-  installer tools (`fetch_installer_sources`, `install_msi`,
-  `install_pkg`).
+  `stage_runtime` / `build` / `boot_smoke` / `engine_surface` /
+  `registry_default` / the installer tools (`fetch_installer_sources`,
+  `install_msi`, `install_pkg`).
 - `.github/workflows/build-payloads.yml` — plan → per-(app × platform)
-  legs (build + smoke against every runtime line) + the installer legs
+  legs (build + smoke against every runtime line) → the engine-surface
+  legs (the runtime-own command surface, one leg per platform) + the
+  installer legs
   (MSI and pkg, lean and fat compositions — build + install-rehearse on
   every trigger, sign + ship on the publish run) → the publish job
   (gated: owner dispatch with `publish: true` on a tag ref — NEVER

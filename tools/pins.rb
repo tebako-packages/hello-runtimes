@@ -9,6 +9,13 @@
 #                         (pure-language law), so a leg builds ONCE and
 #                         smokes against EVERY line the recipe names
 #                         (hello-ruby proves 3.3 and 4.0 alike)
+#   --engine-matrix       the engine-surface job's include list: one
+#                         entry per ci.hosts leg (triplet + runner) —
+#                         ONE leg per platform exercises the whole
+#                         engine set sequentially
+#   --engine-registries   the factory registry refs (tfs:github:<factory>)
+#                         the engine-surface leg configures — the distinct
+#                         apps.*.factory set, never a hand-written copy
 #   --env APP TRIPLET     the leg's env (KEY=value lines for GITHUB_ENV)
 #   --runtimes APP        "<version> <tebako> <release>" per line (the
 #                         leg's stage+smoke loop)
@@ -96,6 +103,15 @@ end
 case ARGV[0]
 when "--matrix"
   puts JSON.generate({ "include" => legs })
+when "--engine-matrix"
+  include = RECIPE.fetch("ci").fetch("hosts").map do |triplet, runner|
+    { "triplet" => triplet, "host_id" => TRIPLET_HOST.fetch(triplet), "runner" => runner }
+  end
+  puts JSON.generate({ "include" => include })
+when "--engine-registries"
+  RECIPE.fetch("apps").values.map { |spec| spec.fetch("factory") }.uniq.each do |factory|
+    puts "tfs:github:#{factory}"
+  end
 when "--env"
   leg = legs.find { |l| l["app"] == ARGV[1] && l["triplet"] == ARGV[2] } or
     abort("pins: no leg for app=#{ARGV[1]} triplet=#{ARGV[2]}")
@@ -165,5 +181,5 @@ when "--installer-sources"
     src.fetch("files").each { |path, sha| puts [repo, ref, path, sha].join("\t") }
   end
 else
-  abort "usage: ruby tools/pins.rb [--matrix | --env APP TRIPLET | --runtimes APP | --payload-args APP | --installer-env lean|fat | --installer-sources]"
+  abort "usage: ruby tools/pins.rb [--matrix | --engine-matrix | --engine-registries | --env APP TRIPLET | --runtimes APP | --payload-args APP | --installer-env lean|fat | --installer-sources]"
 end
