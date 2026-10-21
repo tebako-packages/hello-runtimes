@@ -4,42 +4,44 @@
 # The one-repo-per-package convention bends here by design — this is the
 # reference the docs walk through.
 name: hello-runtimes
-version: "1.0.6"               # every payload in the suite versions together
+version: "1.0.7"               # every payload in the suite versions together
 
 # The pinned tebako toolchain (tfs mkimage + tebako check/publish),
 # digest-pinned per platform against the release's own SHA256SUMS (the
 # trust-anchor pattern: a drifted byte is a pin mismatch, named).
 tools:
   repo: "tamatebako/tebako"
-  release: "v2.8.25"           # v2.8.25 ships the dual-era runtime readers
-                               # (press honors the registry's release.ref —
-                               # the per-line shard catalog needs it)
+  release: "v2.8.50"           # v2.8.50 ships the runtime-own command
+                               # surface (spec 07 §10: `tebako run
+                               # <engine>[:<command>]`, `tebako install
+                               # <engine>`, the runtime-own shim class) —
+                               # the engine-surface job rides exactly it
   sha256:
     linux-gnu-x86_64:
-      tebako:    "3599cdadcff89ab590385dec73227e01fd6dd3953723c0d86ffa443844ebbbeb"
-      tfs:    "9200cc0e6cd0773efd31b625ddaa38cac52aeb6e6ee1c8d94f146b64f396f587"
-      shim:    "11c91f803aeeb19812005cbaad7b1a69e1eaeea25fe79a03ee3556c17c43405d"
-      pkg:    "68391003fd3149630dd5141e76a0176de84bccbc96bf45e7379d561dab395949"
+      tebako:    "5e4683b261e4942e13b71277d6f7041677678dc01dd98cc92f3b06e7dca25a0e"
+      tfs:    "cbc6f3e483b19c2293abf66eda63646b492bf46b645dda1b9a564e4f710c1387"
+      shim:    "caa24805234b86c4e92c516575c15746c02364327a66d6282d0c9b32ba6ebe5a"
+      pkg:    "23366199203e938318c01c8c94e77dc5b1989a805b850a398d0bef9c82de7f3a"
     linux-gnu-arm64:
-      tebako:    "eb1d54737da0b94e49e4c633b9be0e6c272fb499ac68475c659e1fd374e193d7"
-      tfs:    "bdda8863516c2c8f048353fcadf31016f34981672bb3c2dcb96235ddadc054a8"
-      shim:    "b20fc862e0bac69580a4c559fe65b66f809b66821c9c9314525f19706f132edd"
-      pkg:    "9d8d47ce40ff40e418a180e49463cc84e251bc3094f2ab51dc6b179d47eb87b0"
+      tebako:    "4ff8b2f1263040c1393cc2ba3a8400be7b286825dde7632ef1f40d683e2bc504"
+      tfs:    "83e4833b35b7f519d6c9d13205a4b6a726b7a70b3e020dd9ae431fe8f48e2650"
+      shim:    "816fca4f10f140eaafb2051d0e60c8076a0c33470d0e5111fe6a385831f1290e"
+      pkg:    "830bf45bf7701fe76c0901a050768e28743b75f662365e777fbe7f757916e73b"
     macos-x86_64:
-      tebako:    "c9d2a1cc897af570d70bee32465d3223a174ebbd6cc383aac326dc0020727236"
-      tfs:    "962cf89e45a3ab08b41e2d5f8d7a6674646410717806afd45a3945aafadbc0b4"
-      shim:    "89e013ede2eb39cc29406919eff3f7bff17b9b96bcaaf3eb0c4b001c8ce3e54a"
-      pkg:    "ec4ce8c14944d0cc290c0ee1b2edb5a868a2aa9677deefec430f8cc38d1c2f30"
+      tebako:    "a4517221d59dce2aba65089633e4b0a0da132d764ae433d09e09b9ce33e56952"
+      tfs:    "1a7b5f1b05007e55a44dd39df81f9d9041d4473612c4a73f68d9d0a0853e3b55"
+      shim:    "d03a3d891df07958415243db20d28c1c989623390f97bd15dd268f8270c25fed"
+      pkg:    "f0795289df5f8f453c84dad2e71b44b4396027d01565fbbe095a38d6364acd5b"
     macos-arm64:
-      tebako:    "372191bcea4b2ef3d14d2aaa722bf76cbdcb05e9ab33b8d152ae15916eae69c2"
-      tfs:    "5e70f0a7fed74c21b4a328272971472652bd5c0d3840f70091b3650e6842014e"
-      shim:    "bfbfb47344f9129d3ee41def67a92a354f1a1568feed095a4a578e977fbb5ceb"
-      pkg:    "e38d2746a1783885802ca8dc0ad479433e983515dfaae48f8fddbecebcfbf922"
+      tebako:    "38ad1f28f5395142b760c3d90e73730d7732d6bf128ac8ccbc32aa89454c5799"
+      tfs:    "837ce51c3c3715fbc9a1cc61e6e43f6dfdcf823bce4b440bbc2399aebb37b621"
+      shim:    "9e6753b27d936bd7ee864fd74e18b16134e0988ceffb7d52fda59be4dd698bd2"
+      pkg:    "388dd51f2d85ad1defcfc7cc1a9641788776b07931d458145dab5785725765e7"
     windows-ucrt64:
-      tebako:    "ec7232da437d5b5220f06202b852355697f611e4eb56e587767b2ee19eeca3b3"
-      tfs:    "b97232c9292a44262bdf9cdb7ceb44abb2f2330f6885357e578376e1ed1e8176"
-      shim:    "473d7186e81a58271aeec882f98e82b246df3b6ea80341d65647299b358733be"
-      pkg:    "bb4bd8f911118615414a2bf64980b35b05f5d1eec4bd00465db622c3bd30f88d"
+      tebako:    "6f90a407eea73019de4dd2644c27d222be725f5a4b7989e70fe4e15edb522924"
+      tfs:    "cae78731fee1fdbc3b84ddda82c1c08e13ed6d3f2e7199cbf1e55905361cde25"
+      shim:    "209a0c4498c00399656e6b945988693747affa9418b083794bd34c310b050d54"
+      pkg:    "d6995b905abca3a48a4d49e6c2eb6ad8c076ca9b17b5dddfe2026dca3e80b6ba"
 # The apps. Each names its runtime FACTORY + the exact runtime line(s)
 # the legs stage (release channel only — run-artifacts stay a factory
 # debug channel). hello-ruby stages BOTH published ruby lines: one

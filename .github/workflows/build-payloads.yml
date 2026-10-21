@@ -5,6 +5,12 @@ name: build-payloads
 # the app (the payload bytes are runtime-independent — pure-language
 # law), then a tag-dispatched publish signs and ships the set.
 #
+# The engine-surface legs (one per platform) exercise the runtime-own
+# command surface of the pinned CLI (spec 07 §10: `tebako run
+# <engine>[:<command>]`, `tebako install <engine>`, the runtime-own shim
+# class) against the factories' published runtimes — the assertions live
+# in tools/engine_surface.
+#
 # The installer legs (installer-msi / installer-pkg) build the OS-native
 # containers for hello-ruby in both compositions (lean: toolset +
 # install-time seed with the runtime prefetched at install; fat: the
@@ -47,10 +53,13 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.pins.outputs.matrix }}
+      engine_matrix: ${{ steps.pins.outputs.engine_matrix }}
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v6.0.0
       - id: pins
-        run: echo "matrix=$(ruby tools/pins.rb --matrix)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "matrix=$(ruby tools/pins.rb --matrix)" >> "$GITHUB_OUTPUT"
+          echo "engine_matrix=$(ruby tools/pins.rb --engine-matrix)" >> "$GITHUB_OUTPUT"
 
   build:
     needs: plan
@@ -341,6 +350,81 @@ jobs:
           echo "$out2"
           grep -q "acme flavor 0.1.0" <<<"$out2" \
             || { echo "::error::the env pin did not attach the slice"; exit 1; }
+
+  engine-surface:
+    # The runtime-own command surface (spec 07 §10, shipped in the pinned
+    # v2.8.50 CLI): ONE leg per platform exercises the whole engine set
+    # sequentially (tools/engine_surface) — `tebako run <engine>` and
+    # `tebako run <engine>:<command>`, the named errors (69
+    # no-such-engine, 65 undeclared-entrypoint), the jruby/truffleruby
+    # skip gates (their factory registries carry no `engine:` discovery
+    # key today — the gate flips red when one lands), and the shim
+    # surface (`tebako install <engine>` → dispatch through the
+    # registered shim → `shim list` / `doctor` answering the runtime-own
+    # class). The engines resolve against the factory registries the leg
+    # configures (spec 04 — no default registry exists) and the CLI
+    # downloads + verifies + caches the published runtime pairs itself.
+    # The python arm is gated on windows-ucrt (the pair's
+    # libpython3.14.dll links a gettext DLL the release does not ship —
+    # tamatebako/tebako-runtime-python#55; the gate asserts the shape and
+    # flips red when the closure lands).
+    #
+    # No windows-arm64 leg: the engines cover the triplet (node, openjdk,
+    # bun, python, ruby all publish aarch64-windows-ucrt pairs) but the
+    # pinned v2.8.50 CLI ships no windows-ucrt-arm64 tebako/tebako-shim
+    # asset (only tfs/tebako-pkg/the runtime-launcher) — the surface
+    # under test has no binary to ride. The leg joins when the product
+    # ships that pair.
+    name: engine surface (${{ matrix.triplet }})
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.engine_matrix) }}
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash        # Git Bash on the windows leg; inert on POSIX
+    env:
+      # The resolver's authenticated tier (TEBAKO_GITHUB_TOKEN — the
+      # ambient GitHub credential): the registry fetches + runtime-pair
+      # downloads ride the live API/releases, and the CI NAT pool's
+      # shared anonymous bucket is a known flake source.
+      TEBAKO_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v6.0.0
+
+      - name: Leg env (Tebakofile is the SSOT)
+        # The tool pins ride the ordinary --env (hello-ruby has a leg on
+        # every triplet); the engine arms read no APP/ENGINE facet.
+        run: ruby tools/pins.rb --env hello-ruby "${{ matrix.triplet }}" >> "$GITHUB_ENV"
+
+      - name: Fetch the pinned tebako tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p .tools && cd .tools
+          base="https://github.com/tamatebako/tebako/releases/download/$TEBAKO_RELEASE"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TEBAKO_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$SHIM_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/SHA256SUMS"
+          echo "$TEBAKO_SHA256  $TEBAKO_ASSET" > SHA256PINS
+          echo "$SHIM_SHA256  $SHIM_ASSET" >> SHA256PINS
+          if command -v sha256sum >/dev/null 2>&1; then sha256sum -c SHA256PINS; else shasum -a 256 -c SHA256PINS; fi
+          # The pinned digests must also agree with the release's own
+          # SHA256SUMS (a release-side swap is a mismatch, named).
+          for asset in "$TEBAKO_ASSET" "$SHIM_ASSET"; do
+            want="$(grep "  $asset\$" SHA256PINS | cut -d' ' -f1)"
+            got="$(grep "  $asset\$" SHA256SUMS | cut -d' ' -f1 || true)"
+            [ "$got" = "$want" ] || { echo "::error::pin mismatch for $asset: Tebakofile=$want release=${got:-ABSENT}"; exit 1; }
+          done
+          chmod +x "$TEBAKO_ASSET" "$SHIM_ASSET"
+          # tebako install's dispatcher resolution is sibling-wise:
+          # tebako-shim must sit beside the CLI.
+          sfx=""; case "$TEBAKO_ASSET" in *.exe) sfx=.exe ;; esac
+          mv "$TEBAKO_ASSET" "tebako$sfx"
+          mv "$SHIM_ASSET" "tebako-shim$sfx"
+
+      - name: The engine-surface arms (per-engine assertions)
+        run: TRIPLET="${{ matrix.triplet }}" TEBAKO="$PWD/.tools/tebako" tools/engine_surface
 
   installer-msi:
     # The Windows MSI container for hello-ruby, one leg per composition
