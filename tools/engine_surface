@@ -158,14 +158,16 @@ run_ok '^ruby [0-9]' run ruby --version
 say "engine: ruby (bare + gem — the v0.17.2 spawn surface)"
 run_ok '^[0-9]+\.' run ruby:gem --version
 
-say "warm: seal the runtimes — the lazy DEMAND-READ is gated (tebako#851)"
-# A fresh lazy python line MOUNTS (the v2.8.53 shim fix) but the first
-# on-demand block fetch during interpreter boot hangs: tebako#851. The
-# surface itself is proven here on a sealed store — the explicit
-# pre-stage act the install path performs — and the lazy demand-read
-# returns to this arm when #851 closes. The gate is this notice plus the
-# issue, never a silent skip.
-"$TEBAKO" cache seal --all || die "cache seal --all failed — the engine arms below need a sealed store while tebako#851 is open"
+say "warm: eager installs — the lazy DEMAND-READ is gated (tebako#851)"
+# Two independent reasons the arm installs eagerly:
+#  1. The lazy DEMAND-READ during interpreter boot hangs pending
+#     tebako#851 (the fetch's resolver re-enters the interposed surface
+#     behind the VFS read lock). The lazy arm returns when #851 closes.
+#  2. Windows' materialize tier extracts host trees from the image FILE,
+#     so its driver refuses a LAZY_SEEDING env image by name.
+# Eager is the explicit pre-stage the install path performs; the gate is
+# this notice plus the issue, never a silent skip.
+export TEBAKO_RUNTIME_LAZY=0
 
 say "engine: python (bare form — a REAL stdlib import, not --version)"
 # --version exits before any stdlib import and is therefore a vacuous
