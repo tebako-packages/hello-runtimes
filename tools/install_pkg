@@ -240,15 +240,19 @@ if [ "$ARMED" = "true" ]; then
   # publish (the 1.0.8 run failed the same leg three times on
   # api.apple-cloudkit.com's Error 68 while the notarization itself was
   # Accepted). Backoff caps at 60 s; the deadline is the named bound.
+  # Both stapler verbs consult the same ticket service: BUNDLE them in
+  # one retry. The 1.0.9 run showed staple succeeding on attempt 4 and the
+  # standalone validate then dying on the same Error 68, aborting a pkg
+  # that had just been stapled.
   staple_deadline=$(( $(date +%s) + 1800 ))
   staple_wait=10
-  until xcrun stapler staple "$FEEDSTOCK/out/installers/$ASSET"; do
-    [ "$(date +%s)" -lt "$staple_deadline" ] || die "stapler could not fetch the ticket for $ASSET within 1800s"
-    echo "ticket not yet fetchable for $ASSET — polling again in ${staple_wait}s"
+  until xcrun stapler staple "$FEEDSTOCK/out/installers/$ASSET" \
+      && xcrun stapler validate "$FEEDSTOCK/out/installers/$ASSET"; do
+    [ "$(date +%s)" -lt "$staple_deadline" ] || die "stapler could not fetch (or validate) the ticket for $ASSET within 1800s"
+    echo "ticket not yet fetchable or validatable for $ASSET — polling again in ${staple_wait}s"
     sleep "$staple_wait"
     [ "$staple_wait" -ge 60 ] || staple_wait=$(( staple_wait * 2 ))
   done
-  xcrun stapler validate "$FEEDSTOCK/out/installers/$ASSET"
   # The pkg's assessment IS the right spctl gate: notarized + stapled
   # must Assess accepted, source=Notarized Developer ID (spctl prints its
   # verdict on STDERR — 2>&1 or the tee captures nothing).
