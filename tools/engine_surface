@@ -244,8 +244,16 @@ done
 [ "$(grep -c '\[runtime-own\]' <<<"$list_out")" -eq 3 ] || die "shim list: want 3 [runtime-own] rows: $list_out"
 # The machine form answers the same class (provider_kind + engine). The
 # CLI's version banner precedes the document on stdout — the parse starts
-# at the first '{'.
-"$TEBAKO" shim list --json | ruby -rjson -e '
+# at the first '{'. The document and the CLI's status are captured
+# explicitly and always printed, so a CLI failure or a broken row is a
+# named error in the log, never a silent exit under `set -e`.
+set +e
+json_out="$("$TEBAKO" shim list --json 2>&1)"
+json_rc=$?
+set -e
+printf '%s\n' "$json_out"
+[ "$json_rc" -eq 0 ] || die "tebako shim list --json — exit $json_rc (output above)"
+printf '%s\n' "$json_out" | ruby -rjson -e '
   raw = STDIN.read
   doc = JSON.parse(raw[raw.index("{")..])
   own = doc.fetch("commands").select { |c| c["provider_kind"] == "runtime-own" }
@@ -253,7 +261,7 @@ done
   got = own.to_h { |c| [c.fetch("name"), c.fetch("engine")] }
   abort("shim list --json: runtime-own rows #{got.inspect} != #{want.inspect}") unless got == want
   abort("shim list --json: rows unresolved: #{own.inspect}") unless own.all? { |c| c["version"].to_s.length > 0 }
-'
+' || die "shim list --json: the document does not answer the three resolved runtime-own rows (parser output above)"
 
 # Doctor gates on a QUIET store: the leg is sequential, so the per-entry
 # flock files left behind by the installs are provably uncontended — drop
@@ -261,10 +269,30 @@ done
 # flock timeout, and a slow first-engine download would otherwise false
 # the verdict), and put the shims dir on PATH (the not-on-PATH finding is
 # a shell-integration note, never this leg's subject).
+#
+# Doctor re-probes every configured registry (the dispatch-cache rows), so
+# a transient API failure is a network event, not a store verdict. The
+# output is CAPTURED WITH ITS STATUS and always printed: a bare
+# `doctor_out="$(…)"` under `set -e` swallows the finding and kills the
+# leg with no diagnostics. One retry covers a transient probe; a second
+# failure is the named error, with the full output above it.
 rm -f "$HOME_LOCAL"/locks/*
 export PATH="$HOME_LOCAL/shims:$PATH"
-doctor_out="$("$TEBAKO" doctor 2>&1)"
-printf '%s\n' "$doctor_out"
+doctor_out=""
+doctor_rc=0
+for attempt in 1 2; do
+  set +e
+  doctor_out="$("$TEBAKO" doctor 2>&1)"
+  doctor_rc=$?
+  set -e
+  printf '%s\n' "$doctor_out"
+  [ "$doctor_rc" -eq 0 ] && break
+  if [ "$attempt" -eq 1 ]; then
+    echo "tebako doctor exited $doctor_rc (attempt 1 of 2) — the registry probes are network reads; retrying once in 10 s" >&2
+    sleep 10
+  fi
+done
+[ "$doctor_rc" -eq 0 ] || die "tebako doctor — exit $doctor_rc on both attempts (output above)"
 for row in 'ok: shim ruby: ok (runtime-own, engine ruby' 'ok: shim node: ok (runtime-own, engine node' 'ok: shim keytool: ok (runtime-own, engine java'; do
   grep -qF "$row" <<<"$doctor_out" || die "doctor misses «$row»"
 done
