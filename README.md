@@ -77,7 +77,12 @@ dispatch path, or a signing surface regressed.
   `shim list` / `doctor` answering the runtime-own class).
   jruby/truffleruby are deliberate skip gates — their factory registries
   carry no `engine:` discovery key today, so the engine surface answers
-  69 by design; the gate flips red when a factory renders the key.
+  69 by design; the gate flips red when a factory renders the key. The
+  python arm is gated on windows-ucrt only: the pair's
+  `libpython3.14.dll` links `libintl-8.dll`, which the release does not
+  ship, so the exe starts only with a host mingw/msys directory on PATH
+  (tamatebako/tebako-runtime-python#55); the gate asserts that shape and
+  flips red when the factory ships the closure.
 
 ## Layout
 
@@ -109,7 +114,7 @@ compositions a tebako product can take:
 
 | Asset | Composition | Contents | Network |
 |---|---|---|---|
-| `hello-ruby-setup-<ver>-windows-ucrt64.msi` · `hello-ruby-setup-<ver>-macos-<arch>.pkg` | lean | the tebako toolset + an install-time seed | at install only: the seed registers this suite's registry, installs `hello-ruby`, and prefetches its runtime, so the first run is already offline-ready (an offline install still completes — re-run `bootstrap-seed` later) |
+| `hello-ruby-setup-<ver>-windows-ucrt64.msi` · `hello-ruby-setup-<ver>-macos-<arch>.pkg` | lean | the tebako toolset + an install-time seed | at install only: the seed registers this suite's registry, installs `hello-ruby`, prefetches its runtime, and seals the runtime image synchronously (`tebako cache seal --all`), so the first run is already offline-ready (an offline install still completes — re-run `bootstrap-seed` later) |
 | `hello-ruby-fat-setup-<ver>-macos-<arch>.pkg` | fat (airgap) | one self-contained `hello-ruby` executable — bootstrap + ruby runtime + the app, stitched | none — not at install, not at run |
 
 The fat MSI is gated off for now: a self-contained Windows press against

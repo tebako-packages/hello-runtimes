@@ -134,6 +134,17 @@ if [ "$COMPOSITION" = lean ]; then
   # runtime prefetch on a slow link must never fail the install): it warms
   # in the background, logged to home/seed.log; a failed seed never fails
   # the install, and the first user dispatch self-heals regardless.
+  #
+  # The warm dispatch is what FETCHES the runtime pair, and the pinned
+  # CLI installs an env image LAZILY (spec 39: a seed descriptor plus a
+  # background seal thread). The seed therefore finishes the job with the
+  # synchronous `tebako cache seal --all` — after it, the entry is an
+  # ordinary sealed image and the first user run needs no network and no
+  # write into the root-owned store. Without the seal the warm dispatch
+  # leaves a LAZY_SEEDING entry behind: a later dispatch by the (unprivileged)
+  # user mounts through the remote byte source, cannot write the missing
+  # groups into the root-owned entry, and dies with EIO on the touching
+  # read — exactly the failure this suite's pkg rehearsal caught.
   {
     echo '#!/bin/bash'
     echo "# $PRODUCT_NAME bootstrap seed — composed at build time; safe to re-run (tebako install is idempotent)."
@@ -156,6 +167,13 @@ if [ "$COMPOSITION" = lean ]; then
       esac
       echo "\"\$ROOT/home/shims/$w\" || echo \"warning: warm dispatch of $w failed (offline?) — the first user run downloads its runtime\" >&2"
     done
+    echo '# Finish the lazy env-image installs synchronously (spec 39 §5): the'
+    echo '# warm dispatch above seeds the runtime through the remote byte source'
+    echo '# and only starts a background seal, which dies with the shim process.'
+    echo '# The seal pass fills the remaining groups and commits the sealed image'
+    echo '# while the seed still runs as root — the store is then offline-ready'
+    echo '# and read-only for every later, unprivileged dispatch.'
+    echo "\"\$ROOT/bin/tebako\" cache seal --all || echo \"warning: the runtime seal did not complete — the first user run finishes it (network required)\" >&2"
   } > "pkg-root$INSTALL_ROOT/bootstrap-seed.sh"
   chmod 755 "pkg-root$INSTALL_ROOT/bootstrap-seed.sh"
   mkdir -p "pkg-root$INSTALL_ROOT/home/shims"
@@ -249,6 +267,15 @@ case "$COMPOSITION" in
     # so its effects land asynchronously — poll for them with a generous
     # budget, and on timeout dump the seed log + the installer log (the
     # runner is networked; a healthy seed lands in well under a minute).
+    # "Seeded" means the runtime entries are SEALED, not merely present:
+    # the warm dispatch fetches the pair LAZILY (a seed descriptor plus a
+    # background seal), and this rehearsal dispatches as the unprivileged
+    # runner user against the root-owned store — a still-lazy entry would
+    # make the driver fill missing groups into a directory that user
+    # cannot write, which surfaces as EIO at mount. The seed's own
+    # `tebako cache seal --all` lands the image (and its .sha256 anchor)
+    # and retires the descriptor; only then is the store the shape a user
+    # actually runs against.
     deadline=$(( $(date +%s) + 900 ))
     foreground=0
     while :; do
@@ -259,8 +286,17 @@ case "$COMPOSITION" in
       done
       for w in ${BOOTSTRAP_WARM:-}; do
         [ -x "$INSTALL_ROOT/home/shims/$w" ] || seeded=0
-        { [ -d "$INSTALL_ROOT/home/runtimes" ] && [ -n "$(ls -A "$INSTALL_ROOT/home/runtimes" 2>/dev/null)" ]; } || seeded=0
       done
+      runtimes="$INSTALL_ROOT/home/runtimes"
+      if [ -z "$(ls -A "$runtimes" 2>/dev/null)" ]; then
+        seeded=0
+      else
+        for entry in "$runtimes"/*/; do
+          [ -d "$entry" ] || continue
+          compgen -G "$entry*.tfs" >/dev/null || seeded=0
+          if compgen -G "$entry*.tfs.lazy.json" >/dev/null; then seeded=0; fi
+        done
+      fi
       [ "$seeded" = 1 ] && break
       if [ "$(date +%s)" -ge "$deadline" ]; then
         if [ "$foreground" = 0 ]; then

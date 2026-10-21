@@ -40,7 +40,11 @@
 #           `python3 -m pip` is the pip form). The windows leg boots
 #           through the env image's windows_boot: materialize grant
 #           (spec 17 §7 — the driver extracts the verified image to the
-#           exec cache; the factory's own windows smoke covers the tier).
+#           exec cache), but the arm is GATED today: the pair's
+#           libpython3.14.dll links libintl-8.dll (gettext), which no
+#           release asset ships, so the exe starts only with a host
+#           mingw/msys directory on PATH — tamatebako/tebako-runtime-python#55.
+#           See the gate below.
 #   java    bare + keytool, version-pinned to the temurin line via the
 #           version chain's env link (TEBAKO_JAVA_VERSION, exported
 #           leg-wide below): the unpinned pick is the newest version
@@ -156,7 +160,36 @@ say "engine: ruby (bare form — the interpreter)"
 run_ok '^ruby [0-9]' run ruby --version
 
 say "engine: python (bare form)"
-run_ok '^Python [0-9]' run python --version
+case "$TRIPLET" in
+  *windows*)
+    # GATED, not silent (tamatebako/tebako-runtime-python#55): the
+    # factory's windows-ucrt64 pair is not self-contained. Its
+    # libpython3.14.dll imports libintl-8.dll (the gettext runtime), and
+    # no release asset ships that DLL — the exe therefore starts only
+    # when the host toolchain's mingw/msys bin directory is on PATH. The
+    # hostile-PATH trap (rightly) removes it and the process never
+    # starts: exit 127, reproduced on run 39564909866's leg. The gate
+    # asserts today's fact, so it FLIPS RED the moment the factory ships
+    # the closure (a fourth artifact or a static gettext link): replace
+    # it with the ordinary run_ok arm then, never silence it.
+    set +e
+    out="$(PATH="$TRAP_PATH" "$TEBAKO" run python --version 2>&1)"
+    rc=$?
+    set -e
+    printf '%s\n' "$out"
+    [ "$rc" -ne 0 ] || die "the windows python arm now boots under the hostile PATH — the factory closed the gettext gap (tamatebako/tebako-runtime-python#55); replace this gate with the real run_ok arm"
+    [ "$rc" -eq 127 ] || die "the windows python gate: want the load-time 127 (the missing libintl-8.dll), got exit $rc: $out"
+    entry="$(ls -d "$HOME_LOCAL"/runtimes/python-* 2>/dev/null | head -1 || true)"
+    [ -n "$entry" ] || die "the windows python gate: tebako install python left no runtime entry in the store"
+    if compgen -G "$entry/*intl*" >/dev/null; then
+      die "the windows python pair now ships a gettext-family file ($entry) — the closure gap closed; replace this gate with the real run_ok arm"
+    fi
+    echo "::notice::engine-surface: the windows python arm is GATED — the pair's libpython3.14.dll links libintl-8.dll, which the release does not ship (tamatebako/tebako-runtime-python#55); every other engine and platform still runs its real arm"
+    ;;
+  *)
+    run_ok '^Python [0-9]' run python --version
+    ;;
+esac
 
 say "engine: java (bare + keytool; the temurin pin)"
 run_ok 'openjdk version "21\.0\.12"' run java -version

@@ -364,6 +364,10 @@ jobs:
     # class). The engines resolve against the factory registries the leg
     # configures (spec 04 — no default registry exists) and the CLI
     # downloads + verifies + caches the published runtime pairs itself.
+    # The python arm is gated on windows-ucrt (the pair's
+    # libpython3.14.dll links a gettext DLL the release does not ship —
+    # tamatebako/tebako-runtime-python#55; the gate asserts the shape and
+    # flips red when the closure lands).
     #
     # No windows-arm64 leg: the engines cover the triplet (node, openjdk,
     # bun, python, ruby all publish aarch64-windows-ucrt pairs) but the
