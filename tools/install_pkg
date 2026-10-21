@@ -234,12 +234,19 @@ if [ "$ARMED" = "true" ]; then
     die "notarytool did not Accept the pkg"
   }
   # staple fetches the online ticket — Accepted≠visible is a race (the
-  # product's own lesson): bounded poll, then a named failure.
-  staple_deadline=$(( $(date +%s) + 300 ))
+  # product's own lesson): bounded poll, then a named failure. The window
+  # is wide because Apple's ticket-delivery endpoint has multi-hour
+  # outages, and a 5-minute window turned an Apple incident into a red
+  # publish (the 1.0.8 run failed the same leg three times on
+  # api.apple-cloudkit.com's Error 68 while the notarization itself was
+  # Accepted). Backoff caps at 60 s; the deadline is the named bound.
+  staple_deadline=$(( $(date +%s) + 1800 ))
+  staple_wait=10
   until xcrun stapler staple "$FEEDSTOCK/out/installers/$ASSET"; do
-    [ "$(date +%s)" -lt "$staple_deadline" ] || die "stapler could not fetch the ticket for $ASSET within 300s"
-    echo "ticket not yet fetchable for $ASSET — polling again in 10 s"
-    sleep 10
+    [ "$(date +%s)" -lt "$staple_deadline" ] || die "stapler could not fetch the ticket for $ASSET within 1800s"
+    echo "ticket not yet fetchable for $ASSET — polling again in ${staple_wait}s"
+    sleep "$staple_wait"
+    [ "$staple_wait" -ge 60 ] || staple_wait=$(( staple_wait * 2 ))
   done
   xcrun stapler validate "$FEEDSTOCK/out/installers/$ASSET"
   # The pkg's assessment IS the right spctl gate: notarized + stapled
