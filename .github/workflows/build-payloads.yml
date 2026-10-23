@@ -351,6 +351,60 @@ jobs:
           grep -q "acme flavor 0.1.0" <<<"$out2" \
             || { echo "::error::the env pin did not attach the slice"; exit 1; }
 
+  nested-mounts:
+    # The composition calculus's depth arm (spec 23): five payloads mounted
+    # at /a, /a/b, /a/b/c, /a/b/c/d, /a/b/c/d/e in ONE package, each with
+    # its own content/same.txt. A table resolving by mount order answers a
+    # shallower level and the arm fails — the product's own suites prove
+    # the table and the driver; this proves a real pressed package end to
+    # end, on the leg shape every user starts from.
+    name: nested mounts (five levels, one package)
+    needs: [plan]
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TEBAKO_HOME: ${{ github.workspace }}/.store
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v6.0.0
+
+      - name: Leg env (Tebakofile is the SSOT)
+        run: ruby tools/pins.rb --env hello-ruby x86_64-linux-gnu >> "$GITHUB_ENV"
+
+      - name: Fetch the pinned tebako tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p .tools && cd .tools
+          base="https://github.com/tamatebako/tebako/releases/download/$TEBAKO_RELEASE"
+          for asset in "$TEBAKO_ASSET" "$TFS_ASSET" "$SHIM_ASSET" SHA256SUMS; do
+            curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$asset"
+          done
+          echo "$TEBAKO_SHA256  $TEBAKO_ASSET" | sha256sum -c -
+          echo "$TFS_SHA256  $TFS_ASSET" | sha256sum -c -
+          echo "$SHIM_SHA256  $SHIM_ASSET" | sha256sum -c -
+          chmod +x "$TEBAKO_ASSET" "$TFS_ASSET" "$SHIM_ASSET"
+          mv "$TEBAKO_ASSET" tebako
+          mv "$TFS_ASSET" tfs
+          mv "$SHIM_ASSET" tebako-shim
+          echo "TOOLS_DIR=$PWD" >> "$GITHUB_ENV"
+
+      - name: The five-level fixture (press one package, assert every level)
+        run: |
+          set -euo pipefail
+          TFS_CLI="$TOOLS_DIR/tfs" \
+          TEBAKO_CLI="$TOOLS_DIR/tebako" \
+          OUT_DIR="$PWD/out/nested" \
+            tools/nested_fixture
+
+      - name: Upload the fixture's package and paths
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: nested-fixture
+          path: out/nested/
+          retention-days: 7
+
   engine-surface:
     # The runtime-own command surface (spec 07 §10, shipped in the pinned
     # v2.8.50 CLI): ONE leg per platform exercises the whole engine set
