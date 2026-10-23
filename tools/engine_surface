@@ -25,10 +25,10 @@
 #     flips red ON PURPOSE — replace the gate with the real dispatch arm
 #     then (never silence it).
 #   * The shim surface: `tebako install <engine>` (bare → the default
-#     entry's shim) and `tebako install java:keytool` (the command form),
-#     dispatch through the registered shims, `tebako shim list` answering
-#     the runtime-own class (text + JSON), `tebako doctor` reporting the
-#     runtime-own rows ok.
+#     entry's shim) and `tebako install java:keytool` / `python:pip` (the
+#     command form), dispatch through the registered shims, `tebako shim
+#     list` answering the runtime-own class (text + JSON), `tebako doctor`
+#     reporting the runtime-own rows ok.
 #
 # Per-engine command forms (verified against the published env images'
 # declared spawn surfaces, 2026-10-21):
@@ -204,8 +204,14 @@ say "engine: python (bare form — a REAL stdlib import, not --version)"
 # (tamatebako/tebako#848). The import is the acceptance — and on a POSIX
 # tier it is served through the SEEDED mount (the wire assertion).
 run_wire_ok '^encodings$' run python -c "import encodings; print(encodings.__name__)"
-# The v0.3.1+ spawn surface, and the entry dispatch over the same store.
+# The v0.3.1+ spawn surface: both declared names answer, over the same
+# store (the second name is the factory's own alias, not a guess).
 run_ok '^pip [0-9]' run python:pip --version
+run_ok '^pip [0-9]' run python:pip3 --version
+# An undeclared command is a NAMED refusal (exit 65) that lists what the
+# image does declare — never a silent fallback to a host interpreter.
+run_rc 65 "declares no runtime entrypoint of that name (declared: pip, pip3)" \
+  run python:nonexistent --version
 
 say "engine: python (the hostile-PATH boot — the pair is self-contained)"
 # tamatebako/tebako-runtime-python#55: the windows pair used to need a
@@ -248,6 +254,10 @@ say "the shim surface: install (bare + command forms), dispatch, list, doctor"
 "$TEBAKO" install ruby
 "$TEBAKO" install node
 "$TEBAKO" install java:keytool
+# The python surface's command form (the factory's declared pip entry): the
+# same runtime-own class as keytool, on a runtime whose default entry is
+# the interpreter itself.
+"$TEBAKO" install python:pip
 
 shim_file() { local p="$HOME_LOCAL/shims/$1"; [ -e "$p" ] || p="$p.exe"; [ -e "$p" ] || die "shim missing: $1"; printf '%s' "$p"; }
 run_shim_ok() {
@@ -265,13 +275,14 @@ run_shim_ok() {
 run_shim_ok '^ruby [0-9]' ruby --version
 run_shim_ok '^v[0-9]' node --version
 run_shim_ok 'Key and Certificate Management Tool' keytool
+run_shim_ok '^pip [0-9]' pip --version
 
 list_out="$("$TEBAKO" shim list)"
 printf '%s\n' "$list_out"
-for row in 'runtime-own commands:' 'command ruby (engine ruby):' 'command node (engine node):' 'command keytool (engine java):'; do
+for row in 'runtime-own commands:' 'command ruby (engine ruby):' 'command node (engine node):' 'command keytool (engine java):' 'command pip (engine python):'; do
   grep -qF "$row" <<<"$list_out" || die "shim list misses «$row»"
 done
-[ "$(grep -c '\[runtime-own\]' <<<"$list_out")" -eq 3 ] || die "shim list: want 3 [runtime-own] rows: $list_out"
+[ "$(grep -c '\[runtime-own\]' <<<"$list_out")" -eq 4 ] || die "shim list: want 4 [runtime-own] rows: $list_out"
 # The machine form answers the same class (provider_kind + engine). The
 # CLI's version banner precedes the document on stdout — the parse starts
 # at the first '{'. The document and the CLI's status are captured
@@ -287,11 +298,11 @@ printf '%s\n' "$json_out" | ruby -rjson -e '
   raw = STDIN.read
   doc = JSON.parse(raw[raw.index("{")..])
   own = doc.fetch("commands").select { |c| c["provider_kind"] == "runtime-own" }
-  want = { "ruby" => "ruby", "node" => "node", "keytool" => "java" }
+  want = { "ruby" => "ruby", "node" => "node", "keytool" => "java", "pip" => "python" }
   got = own.to_h { |c| [c.fetch("name"), c.fetch("engine")] }
   abort("shim list --json: runtime-own rows #{got.inspect} != #{want.inspect}") unless got == want
   abort("shim list --json: rows unresolved: #{own.inspect}") unless own.all? { |c| c["version"].to_s.length > 0 }
-' || die "shim list --json: the document does not answer the three resolved runtime-own rows (parser output above)"
+' || die "shim list --json: the document does not answer the four resolved runtime-own rows (parser output above)"
 
 # Doctor gates on a QUIET store: the leg is sequential, so the per-entry
 # flock files left behind by the installs are provably uncontended — drop
@@ -323,7 +334,7 @@ for attempt in 1 2; do
   fi
 done
 [ "$doctor_rc" -eq 0 ] || die "tebako doctor — exit $doctor_rc on both attempts (output above)"
-for row in 'ok: shim ruby: ok (runtime-own, engine ruby' 'ok: shim node: ok (runtime-own, engine node' 'ok: shim keytool: ok (runtime-own, engine java'; do
+for row in 'ok: shim ruby: ok (runtime-own, engine ruby' 'ok: shim node: ok (runtime-own, engine node' 'ok: shim keytool: ok (runtime-own, engine java' 'ok: shim pip: ok (runtime-own, engine python'; do
   grep -qF "$row" <<<"$doctor_out" || die "doctor misses «$row»"
 done
 grep -q 'tebako doctor: no problems found' <<<"$doctor_out" || die "doctor reports problems: $doctor_out"
