@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# tools/nested_fixture — the five-level recursive-mount fixture.
+#
+# The composition calculus proves the mount algebra at depth in the
+# product's own suites; this is the STANDING package-level fixture: five
+# tiny payloads mounted at /a, /a/b, /a/b/c, /a/b/c/d, /a/b/c/d/e, each
+# carrying content/same.txt with its OWN bytes, pressed into one package.
+# A table that resolves by mount ORDER instead of longest prefix answers
+# with a shallower level's content and fails the assertion below — which
+# is the property the whole arc is about.
+#
+# Inputs (env, from tools/pins.rb --env where the leg has them):
+#   TFS_CLI      the pinned tfs binary (default: tfs on PATH)
+#   TEBAKO_CLI   the pinned tebako CLI (default: tebako on PATH)
+#   BOOTSTRAP    optional --bootstrap path (a source-built bootstrap)
+#   RUBY_VERSION optional concrete interpreter version for the press (-R;
+#                the CLI takes x.y.z, never a constraint — the store's
+#                cached line is used when unset)
+#   OUT_DIR      where the fixture lives (default: out/nested)
+#
+# Produces: $OUT_DIR/lN.tfs (5 payloads), $OUT_DIR/nested (the package),
+# and $OUT_DIR/paths.txt (what the package printed, for the leg log).
+set -euo pipefail
+
+die() { echo "nested_fixture: $*" >&2; exit 1; }
+step() { printf '\n== %s\n' "$*"; }
+
+TFS_CLI="${TFS_CLI:-tfs}"
+TEBAKO_CLI="${TEBAKO_CLI:-tebako}"
+RUBY_VERSION="${RUBY_VERSION:-}"
+OUT_DIR="${OUT_DIR:-out/nested}"
+WORK="$OUT_DIR/work"
+
+rm -rf "$OUT_DIR"
+mkdir -p "$OUT_DIR" "$WORK"
+
+MOUNTS=(/a /a/b /a/b/c /a/b/c/d /a/b/c/d/e)
+
+# ---------------------------------------------------------------- payloads
+step "five payloads, one distinct content line each"
+args=()
+for i in 1 2 3 4 5; do
+  dir="$WORK/l$i"
+  mkdir -p "$dir"
+  printf 'level-%s\n' "$i" > "$dir/same.txt"
+  "$TFS_CLI" mkimage --format limnifs "$dir" --output "$OUT_DIR/l$i.tfs" >/dev/null
+  mount="${MOUNTS[$((i - 1))]}"
+  args+=("--image" "$OUT_DIR/l$i.tfs:$mount")
+done
+
+# -------------------------------------------------------------------- app
+# The app reads every mount's own file. Nothing tebako-side compiles; this
+# is the fixture's own Ruby source (audience law 3).
+step "the app that reads all five levels"
+APP="$WORK/app"
+mkdir -p "$APP"
+cat > "$APP/main.rb" <<'RUBY'
+levels = %w[/a /a/b /a/b/c /a/b/c/d /a/b/c/d/e]
+levels.each do |mount|
+  path = File.join(mount, "same.txt")
+  print "#{mount}: "
+  puts(File.exist?(path) ? File.read(path).strip : "MISSING")
+end
+RUBY
+
+# ------------------------------------------------------------------ press
+step "press ONE package with the five nested mounts"
+press_args=(press -r "$APP" -e main.rb "$@" -o "$OUT_DIR/nested")
+press_args+=("${args[@]}")
+[ -n "${BOOTSTRAP:-}" ] && press_args+=(--bootstrap "$BOOTSTRAP")
+[ -n "${RUBY_VERSION:-}" ] && press_args+=(-R "$RUBY_VERSION")
+"$TEBAKO_CLI" "${press_args[@]}"
+
+# ------------------------------------------------------------------- assert
+step "every level answers with its OWN content"
+expected="$WORK/expected.txt"
+for i in 1 2 3 4 5; do
+  printf '%s: level-%s\n' "${MOUNTS[$((i - 1))]}" "$i"
+done > "$expected"
+
+got="$OUT_DIR/paths.txt"
+"$OUT_DIR/nested" > "$got"
+cat "$got"
+if ! diff -u "$expected" "$got"; then
+  die "a level did not answer with its own content — the mount table resolved by order, not by longest prefix"
+fi
+echo "nested_fixture: OK — five levels, each served from its own mount"
