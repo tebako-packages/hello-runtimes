@@ -54,12 +54,14 @@ jobs:
     outputs:
       matrix: ${{ steps.pins.outputs.matrix }}
       engine_matrix: ${{ steps.pins.outputs.engine_matrix }}
+      press_matrix: ${{ steps.pins.outputs.press_matrix }}
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v6.0.0
       - id: pins
         run: |
           echo "matrix=$(ruby tools/pins.rb --matrix)" >> "$GITHUB_OUTPUT"
           echo "engine_matrix=$(ruby tools/pins.rb --engine-matrix)" >> "$GITHUB_OUTPUT"
+          echo "press_matrix=$(ruby tools/pins.rb --press-matrix)" >> "$GITHUB_OUTPUT"
 
   build:
     needs: plan
@@ -479,6 +481,49 @@ jobs:
 
       - name: The engine-surface arms (per-engine assertions)
         run: TRIPLET="${{ matrix.triplet }}" TEBAKO="$PWD/.tools/tebako" tools/engine_surface
+
+  press-loop:
+    # The zero-ceremony press's acceptance arm (the arc's Stage B wiring):
+    # a bare `tebako press` in a fixture project — no flags, the detection
+    # derives the plan — then the pressed package RUNS, and
+    # `--emit-recipe` renders the feedstock recipe from the press that
+    # just succeeded. Node today (its backend ships in the pinned tool
+    # line); python joins when the tools pin rolls to a line carrying the
+    # python backend (arc 02's Stage C).
+    name: press loop (${{ matrix.triplet }})
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.press_matrix) }}
+    runs-on: ${{ matrix.runner }}
+    env:
+      TEBAKO_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v6.0.0
+
+      - name: Leg env (Tebakofile is the SSOT)
+        # The tool pins ride the ordinary --env (hello-node has a leg on
+        # both press triplets); the press arm reads no APP/ENGINE facet.
+        run: ruby tools/pins.rb --env hello-node "${{ matrix.triplet }}" >> "$GITHUB_ENV"
+
+      - name: Fetch the pinned tebako tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p .tools && cd .tools
+          base="https://github.com/tamatebako/tebako/releases/download/$TEBAKO_RELEASE"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/$TEBAKO_ASSET"
+          curl -fsSLO --retry 5 --retry-all-errors --retry-delay 3 "$base/SHA256SUMS"
+          echo "$TEBAKO_SHA256  $TEBAKO_ASSET" | { if command -v sha256sum >/dev/null 2>&1; then sha256sum -c -; else shasum -a 256 -c -; fi; }
+          # The pinned digest must also agree with the release's own
+          # SHA256SUMS (a release-side swap is a mismatch, named).
+          got="$(grep "  $TEBAKO_ASSET\$" SHA256SUMS | cut -d' ' -f1 || true)"
+          [ "$got" = "$TEBAKO_SHA256" ] || { echo "::error::pin mismatch for $TEBAKO_ASSET: Tebakofile=$TEBAKO_SHA256 release=${got:-ABSENT}"; exit 1; }
+          chmod +x "$TEBAKO_ASSET"
+          mv "$TEBAKO_ASSET" tebako
+          echo "TOOLS_DIR=$PWD" >> "$GITHUB_ENV"
+
+      - name: Press the node fixture, run the package, emit the recipe
+        run: TEBAKO_CLI="$TOOLS_DIR/tebako" tools/press_loop press/hello-node "hello from a pressed node project"
 
   installer-msi:
     # The Windows MSI container for hello-ruby, one leg per composition

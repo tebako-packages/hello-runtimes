@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# tools/press_loop — the zero-ceremony press's acceptance arm (arc 02):
+# press a fixture project with a BARE `tebako press` (no flags — the
+# detection derives the plan), run the package it made, and assert its
+# output; then `--emit-recipe` and assert the feedstock recipe renders
+# (the graduation path — a generated recipe, never a hand-written one).
+#
+#   tools/press_loop <fixture-dir> <expected-output-line>
+#
+# The store is a scratch TEBAKO_HOME configured with the factory
+# registries from the Tebakofile (pins.rb --engine-registries — spec 04:
+# no default registry exists). The press resolves the runtime pair
+# through the same dispatch chain `tebako run <engine>` uses, downloads
+# it once, and the package runs against the same store.
+set -euo pipefail
+
+fixture=$1
+want=$2
+
+[ -n "${TEBAKO_CLI:-}" ] || { echo "TEBAKO_CLI unset (the pinned tebako binary)" >&2; exit 2; }
+[ -d "$fixture" ] || { echo "fixture $fixture missing" >&2; exit 2; }
+
+say() { printf '\n== %s ==\n' "$*"; }
+
+export TEBAKO_HOME
+TEBAKO_HOME="$(mktemp -d)/store"
+mkdir -p "$TEBAKO_HOME"
+
+say "store config: the factory registries (the Tebakofile flows them)"
+{
+  echo "registries:"
+  ruby "$(dirname "$0")/pins.rb" --engine-registries | sed 's/^/  - /'
+} > "$TEBAKO_HOME/config.yaml"
+
+# Press in a COPY — the press writes alongside the project and the
+# fixture tree is the repo's.
+work="$(mktemp -d)/proj"
+cp -R "$fixture" "$work"
+
+say "tebako press (no flags — the detection derives the plan)"
+(cd "$work" && "$TEBAKO_CLI" press)
+
+package="$(cd "$work" && ls -t | head -1)"
+[ -f "$work/$package" ] || { echo "the press named no package beside the project" >&2; exit 1; }
+[ -x "$work/$package" ] || chmod +x "$work/$package"
+
+say "run the pressed package"
+out="$(TEBAKO_HOME="$TEBAKO_HOME" "$work/$package")"
+echo "$out"
+grep -q "$want" <<<"$out" \
+  || { echo "::error::the package said '$out', wanted '$want'"; exit 1; }
+
+say "tebako press --emit-recipe (the graduation path)"
+(cd "$work" && "$TEBAKO_CLI" press --emit-recipe)
+[ -f "$work/Tebakofile" ] || { echo "::error::no Tebakofile rendered"; exit 1; }
+grep -q 'system: press' "$work/Tebakofile" \
+  || { echo "::error::the recipe does not name the press as its staging engine"; exit 1; }
+cat "$work/Tebakofile"
+
+say "press-loop green"
