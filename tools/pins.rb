@@ -13,6 +13,9 @@
 #                         entry per ci.hosts leg (triplet + runner) —
 #                         ONE leg per platform exercises the whole
 #                         engine set sequentially
+#   --press-matrix        the press-loop job's include list: the cheapest
+#                         gnu leg plus macOS arm64 (the press is
+#                         host-local; ci.hosts stays the runner SSOT)
 #   --engine-registries   the factory registry refs (tfs:github:<factory>)
 #                         the engine-surface leg configures — the distinct
 #                         apps.*.factory set, never a hand-written copy
@@ -108,6 +111,14 @@ when "--engine-matrix"
     { "triplet" => triplet, "host_id" => TRIPLET_HOST.fetch(triplet), "runner" => runner }
   end
   puts JSON.generate({ "include" => include })
+when "--press-matrix"
+  # The press-loop arm's legs: the press is host-local (it vendors the
+  # closure for the platform it runs on — the docker-build analogy), so
+  # the cheapest gnu leg plus the macOS arm64 leg cover the two host
+  # classes the stranger walkthrough measures. ci.hosts stays the SSOT.
+  %w[x86_64-linux-gnu aarch64-macos].map do |triplet|
+    { "triplet" => triplet, "runner" => RECIPE.fetch("ci").fetch("hosts").fetch(triplet) }
+  end.then { |include| puts JSON.generate({ "include" => include }) }
 when "--engine-registries"
   RECIPE.fetch("apps").values.map { |spec| spec.fetch("factory") }.uniq.each do |factory|
     puts "tfs:github:#{factory}"
