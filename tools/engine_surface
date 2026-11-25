@@ -23,7 +23,29 @@
 #     the payload dispatch path by design (the owner compose is not the
 #     runtime-own wire). When a factory renders the engine key this arm
 #     flips red ON PURPOSE — replace the gate with the real dispatch arm
-#     then (never silence it).
+#     then (never silence it). `tebako run dotnet` → 69 TODAY likewise:
+#     the dotnet factory's first publish is pending (no release, no
+#     registry rows — and the dormant hello-dotnet arm keeps its factory
+#     out of --engine-registries, so the leg never even configures the
+#     ref). The gate flips red the day the publish lands AND the
+#     Tebakofile arm's platforms flip joins the factory to the list —
+#     replace it with the real dispatch arm then.
+#   * The census engines (php, julia, r — the v0.1.0 census wave): bare
+#     form + a real script probe each, platform-gated to the triplets the
+#     factories publish (php/r ship no windows and no gnu-arm64 pair;
+#     julia adds windows-ucrt64; the suite has no musl runner tier). An
+#     uncovered leg prints the named skip, never a guess. Two macOS
+#     gates ride the published v0.1.0 pairs (both signed without the
+#     allow-dyld-environment-variables grant, so the preload-shim re-exec
+#     runs shimless on macOS 14 — the runner pool's macos-15 tolerance is
+#     not the proof; a green leg must hold on every supported macOS):
+#     r's SCRIPT probe gates off (the interpreter's own boot reads the
+#     mounted base library — "unable to open the base package",
+#     tebako-runtime-r#5, fixed source-side as tebako-runtime-r#6 after
+#     the publish), while php's inline -r probes are unaffected (the
+#     interpreter's boot reads nothing from the image) and only the FILE
+#     class gates — at the payload arm (tebako-runtime-php#7). Both open
+#     with the factories' entitlement-fixed re-publishes.
 #   * The shim surface: `tebako install <engine>` (bare → the default
 #     entry's shim) and `tebako install java:keytool` / `python:pip` (the
 #     command form), dispatch through the registered shims, `tebako shim
@@ -66,6 +88,17 @@
 #           named form.
 #   bun     bare + bunx (declared on every platform; bunx is the same
 #           static binary re-entrant under its alias).
+#   php     bare only — the v0.1.0 env image declares NO entrypoints (the
+#           spawn surface arrives with the factory's composer-lane
+#           increment), so the bare form's default entry IS the
+#           interpreter; the json_encode probe proves the extension
+#           surface boots (json is core, always present).
+#   julia   bare only — the v0.1.0 env image declares the ONE entrypoint
+#           (julia); the bare form's default resolves to it.
+#   r       bare only — the v0.1.0 env image declares NO entrypoints (the
+#           spawn surface arrives with the CRAN-closure increment); the
+#           exe's front-end is Rscript-shaped, so --version/-e ride the
+#           Rscript grammar.
 #
 # Env (the workflow supplies): TEBAKO (the pinned CLI path), TRIPLET (the
 # leg's triplet, messages only). The registries + the java pin are derived
@@ -161,13 +194,40 @@ run_wire_ok() {
 # PATH).
 TRAP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TRAP_DIR"' EXIT
-for name in ruby python python3 node npm npx bun bunx java keytool gem jruby truffleruby; do
+for name in ruby python python3 node npm npx bun bunx java keytool gem jruby truffleruby php julia r R Rscript dotnet; do
   printf '#!/bin/sh\necho "PATH-LEAK: %s executed from the host PATH" >&2\nexit 42\n' "$name" > "$TRAP_DIR/$name"
   chmod +x "$TRAP_DIR/$name"
 done
 TRAP_PATH="$TRAP_DIR:/usr/bin:/bin"
 
-say "store config: the seven factory registries; the temurin pin rides the env link"
+# covered <app>: the leg's triplet is in the app's declared platforms
+# (the Tebakofile is the SSOT — the same list the leg matrix reads; an
+# app narrowed on a factory defect narrows the surface arm with it).
+covered() {
+  local platforms; platforms="$(ruby tools/pins.rb --platforms "$1")"
+  case " $platforms " in *" $TRIPLET "*) return 0 ;; *) return 1 ;; esac
+}
+
+# The runtime-own coverage of the census FACTORIES' published pairs
+# (wider than the payload legs for php and r: the payload smoke
+# dispatches a script FILE through the mount, which the published v0.1.0
+# macOS pairs cannot serve — tebako-runtime-php#7, tebako-runtime-r#5 —
+# while the install + bare-dispatch surface works there: php's boot
+# reads nothing from the image, so --version and inline -r run shimless;
+# r's --version is the fast path that never touches R). Sourced from the
+# factory registries' v0.1.0 rows (2026-11); the musl pairs have no
+# runner tier in this suite; julia's coverage IS its payload legs (the
+# exec-cache shape has no shimless class).
+PHP_FACTORY_PLATFORMS="x86_64-linux-gnu x86_64-macos aarch64-macos"
+php_factory_covered() {
+  case " $PHP_FACTORY_PLATFORMS " in *" $TRIPLET "*) return 0 ;; *) return 1 ;; esac
+}
+R_FACTORY_PLATFORMS="x86_64-linux-gnu x86_64-macos aarch64-macos"
+r_factory_covered() {
+  case " $R_FACTORY_PLATFORMS " in *" $TRIPLET "*) return 0 ;; *) return 1 ;; esac
+}
+
+say "store config: the ten factory registries; the temurin pin rides the env link"
 # The registries list FLOWS from the Tebakofile's apps.*.factory set
 # (pins.rb --engine-registries). No default registry exists by design —
 # engine resolution reads exactly these. The java pin is the version
@@ -239,6 +299,48 @@ say "engine: bun (bare + bunx)"
 run_ok '^[0-9]+\.[0-9]+\.[0-9]+' run bun --version
 run_ok '^[0-9]+\.[0-9]+\.[0-9]+' run bun:bunx --version
 
+say "engine: php (bare + script + the extension surface)"
+if php_factory_covered; then
+  run_wire_ok '^PHP 8\.4\.' run php --version
+  run_ok '^hello-php-probe$' run php -r 'echo "hello-php-probe\n";'
+  # json_encode — a core extension, always present since php 8.0 (the
+  # composer-class payload's floor): the extension surface boots.
+  # composer itself is NOT in this runtime (the factory's composer-lane
+  # increment lands the spawn surface later) — there is no
+  # package-manager probe for php today, by the factory's design.
+  run_ok '^ext json: \{"probe":"ok"\}$' run php -r 'echo "ext json: ", json_encode(["probe" => "ok"]), "\n";'
+  case "$TRIPLET" in
+    *-macos)
+      say "engine: php — the inline -r surface is unaffected on macOS, but the FILE class (a payload's script opened through the mount) gates at the PAYLOAD arm: the published v0.1.0 pair's signed exe lacks the allow-dyld-environment-variables grant, so a mounted file dies shimless on macOS 14 (tebako-runtime-php#7). hello-php's legs join with the factory's entitlement-fixed re-publish."
+      ;;
+  esac
+else
+  say "engine: php — skipped on $TRIPLET (the factory publishes no $TRIPLET pair today; the arm covers: $PHP_FACTORY_PLATFORMS)"
+fi
+
+say "engine: julia (bare + script)"
+if covered hello-julia; then
+  run_wire_ok '^julia version 1\.13' run julia --version
+  run_ok '^hello-julia-probe$' run julia -e 'println("hello-julia-probe")'
+else
+  say "engine: julia — skipped on $TRIPLET (the factory publishes no $TRIPLET pair today; the arm covers: $(ruby tools/pins.rb --platforms hello-julia))"
+fi
+
+say "engine: r (bare — the Rscript-shaped front-end)"
+if r_factory_covered; then
+  run_wire_ok '^Rscript \(R\) version 4\.6' run r --version
+  case "$TRIPLET" in
+    *-macos)
+      say "engine: r — the script surface gates off on macOS (tebako-runtime-r#5: the published v0.1.0 pair's signed exe lacks the allow-dyld-environment-variables grant, so scripts die shimless on macOS 14 — and a green leg must hold on every supported macOS, not only on this runner pool's tolerance. The fix merged source-side as tebako-runtime-r#6; this gate opens with the factory's re-published pair)"
+      ;;
+    *)
+      run_ok '^hello-r-probe$' run r -e 'cat("hello-r-probe\n")'
+      ;;
+  esac
+else
+  say "engine: r — skipped on $TRIPLET (the factory publishes no $TRIPLET pair today; the arm covers: $R_FACTORY_PLATFORMS)"
+fi
+
 say "named errors: the no-such-engine and undeclared-entrypoint shapes"
 run_rc 69 'none lists a `kind: runtime` entry for engine "nosuchengine"' run nosuchengine
 run_rc 65 "--tebako-entry 'nosuch': the env image declares no runtime entrypoint of that name (declared: java, jfr, jrunscript, jwebserver, keytool, rmiregistry)" run java:nosuch
@@ -246,6 +348,15 @@ run_rc 65 "--tebako-entry 'nosuch': the env image declares no runtime entrypoint
 say "skip gates: jruby + truffleruby (registry carries no engine: key)"
 run_rc 69 'engine "jruby"' run jruby
 run_rc 69 'engine "truffleruby"' run truffleruby
+
+say "skip gate: dotnet (the factory's first publish is pending — no release, no registry rows)"
+# The dormant hello-dotnet arm (empty platforms) keeps the factory out of
+# --engine-registries, so the leg never configures the ref at all — the
+# 69 is the same shape either way. When the publish lands AND the
+# Tebakofile arm's platforms flip joins the factory to the list, this
+# gate flips red ON PURPOSE: replace it with the real dispatch arm then
+# (never silence it).
+run_rc 69 'engine "dotnet"' run dotnet
 
 say "the shim surface: install (bare + command forms), dispatch, list, doctor"
 # The dispatcher resolves sibling-wise: tebako-shim sits beside the CLI
@@ -258,6 +369,26 @@ say "the shim surface: install (bare + command forms), dispatch, list, doctor"
 # same runtime-own class as keytool, on a runtime whose default entry is
 # the interpreter itself.
 "$TEBAKO" install python:pip
+
+# The runtime-own rows this leg registers: the base four plus every
+# COVERED census engine (bare form — the default entry's name falls back
+# to the engine name where the env image declares no entrypoints: php, r;
+# julia's one declared entrypoint IS the interpreter). The list/doctor
+# assertions below compute from this set — never a hand-written count.
+OWN_NAMES=(ruby node keytool pip)
+OWN_ENGINES=(ruby node java python)
+if php_factory_covered; then
+  "$TEBAKO" install php
+  OWN_NAMES+=(php); OWN_ENGINES+=(php)
+fi
+if covered hello-julia; then
+  "$TEBAKO" install julia
+  OWN_NAMES+=(julia); OWN_ENGINES+=(julia)
+fi
+if r_factory_covered; then
+  "$TEBAKO" install r
+  OWN_NAMES+=(r); OWN_ENGINES+=(r)
+fi
 
 shim_file() { local p="$HOME_LOCAL/shims/$1"; [ -e "$p" ] || p="$p.exe"; [ -e "$p" ] || die "shim missing: $1"; printf '%s' "$p"; }
 run_shim_ok() {
@@ -276,33 +407,59 @@ run_shim_ok '^ruby [0-9]' ruby --version
 run_shim_ok '^v[0-9]' node --version
 run_shim_ok 'Key and Certificate Management Tool' keytool
 run_shim_ok '^pip [0-9]' pip --version
+# The covered census engines' shims dispatch the same programs the run
+# arms did — install → registry resolution → the registered shim → the
+# verified output, the task's end-to-end proof per engine.
+if php_factory_covered; then
+  run_shim_ok '^PHP 8\.4\.' php --version
+  run_shim_ok '^shim-php-ok$' php -r 'echo "shim-php-ok\n";'
+fi
+if covered hello-julia; then
+  run_shim_ok '^julia version 1\.13' julia --version
+  run_shim_ok '^shim-julia-ok$' julia -e 'println("shim-julia-ok")'
+fi
+if r_factory_covered; then
+  run_shim_ok '^Rscript \(R\) version 4\.6' r --version
+  case "$TRIPLET" in
+    # macOS: the script gate is named at the r run arm above — the shim
+    # proves --version (the fast path) only.
+    *-macos) : ;;
+    *) run_shim_ok '^shim-r-ok$' r -e 'cat("shim-r-ok\n")' ;;
+  esac
+fi
 
 list_out="$("$TEBAKO" shim list)"
 printf '%s\n' "$list_out"
-for row in 'runtime-own commands:' 'command ruby (engine ruby):' 'command node (engine node):' 'command keytool (engine java):' 'command pip (engine python):'; do
+grep -qF 'runtime-own commands:' <<<"$list_out" || die "shim list misses «runtime-own commands:»"
+for i in "${!OWN_NAMES[@]}"; do
+  row="command ${OWN_NAMES[$i]} (engine ${OWN_ENGINES[$i]}):"
   grep -qF "$row" <<<"$list_out" || die "shim list misses «$row»"
 done
-[ "$(grep -c '\[runtime-own\]' <<<"$list_out")" -eq 4 ] || die "shim list: want 4 [runtime-own] rows: $list_out"
+[ "$(grep -c '\[runtime-own\]' <<<"$list_out")" -eq "${#OWN_NAMES[@]}" ] || die "shim list: want ${#OWN_NAMES[@]} [runtime-own] rows (${OWN_NAMES[*]}): $list_out"
 # The machine form answers the same class (provider_kind + engine). The
 # CLI's version banner precedes the document on stdout — the parse starts
 # at the first '{'. The document and the CLI's status are captured
 # explicitly and always printed, so a CLI failure or a broken row is a
-# named error in the log, never a silent exit under `set -e`.
+# named error in the log, never a silent exit under `set -e`. The
+# expected rows are the leg's OWN set (computed at the installs above).
 set +e
 json_out="$("$TEBAKO" shim list --json 2>&1)"
 json_rc=$?
 set -e
 printf '%s\n' "$json_out"
 [ "$json_rc" -eq 0 ] || die "tebako shim list --json — exit $json_rc (output above)"
+WANT_OWN=""
+for i in "${!OWN_NAMES[@]}"; do WANT_OWN+="${OWN_NAMES[$i]}:${OWN_ENGINES[$i]} "; done
+export WANT_OWN
 printf '%s\n' "$json_out" | ruby -rjson -e '
   raw = STDIN.read
   doc = JSON.parse(raw[raw.index("{")..])
   own = doc.fetch("commands").select { |c| c["provider_kind"] == "runtime-own" }
-  want = { "ruby" => "ruby", "node" => "node", "keytool" => "java", "pip" => "python" }
+  want = ENV.fetch("WANT_OWN").split.map { |pair| pair.split(":", 2) }.to_h
   got = own.to_h { |c| [c.fetch("name"), c.fetch("engine")] }
   abort("shim list --json: runtime-own rows #{got.inspect} != #{want.inspect}") unless got == want
   abort("shim list --json: rows unresolved: #{own.inspect}") unless own.all? { |c| c["version"].to_s.length > 0 }
-' || die "shim list --json: the document does not answer the four resolved runtime-own rows (parser output above)"
+' || die "shim list --json: the document does not answer the resolved runtime-own rows (parser output above)"
 
 # Doctor gates on a QUIET store: the leg is sequential, so the per-entry
 # flock files left behind by the installs are provably uncontended — drop
@@ -334,7 +491,8 @@ for attempt in 1 2; do
   fi
 done
 [ "$doctor_rc" -eq 0 ] || die "tebako doctor — exit $doctor_rc on both attempts (output above)"
-for row in 'ok: shim ruby: ok (runtime-own, engine ruby' 'ok: shim node: ok (runtime-own, engine node' 'ok: shim keytool: ok (runtime-own, engine java' 'ok: shim pip: ok (runtime-own, engine python'; do
+for i in "${!OWN_NAMES[@]}"; do
+  row="ok: shim ${OWN_NAMES[$i]}: ok (runtime-own, engine ${OWN_ENGINES[$i]}"
   grep -qF "$row" <<<"$doctor_out" || die "doctor misses «$row»"
 done
 grep -q 'tebako doctor: no problems found' <<<"$doctor_out" || die "doctor reports problems: $doctor_out"

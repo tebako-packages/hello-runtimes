@@ -1,0 +1,50 @@
+schema_version: 1
+# Payload manifest for hello-julia (spec 03 §2.2; filled by tools/build).
+identity:
+  schema_version: 1
+  kind: app
+  name: "hello-julia"
+  version: "@@VERSION@@"
+  producer: {tool: feedstock-build, tool_version: "1"}
+  created: "@@CREATED@@"                      # pinned at release time
+  source:
+    commit: "@@FEEDSTOCK_SHA@@"
+    builder: "@@BUILDER@@"                    # "gha:run:<id>" on CI builds
+  digest:
+    tree_hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"  # placeholder until the CAS lands (spec 03)
+    blob_sha256: "@@BLOB_SHA256@@"
+  signing: {state: unsigned}
+  encryption: {state: none}
+  annotations: {sample: hello-runtimes, runtime: julia}
+provides:
+  entrypoints:
+    - name: hello-julia
+      # The entry IS the script; the wrapper composes
+      # [julia, /app/hello.jl, <user args…>] (spec 29 §1: the interpreter
+      # at index 0, args_default between it and the entry). Base-only
+      # julia, copied verbatim — nothing compiles.
+      path: /app/hello.jl
+      args_default: []
+      # Pinned to the factory's own implementation (`julia` — spec 28 §8's
+      # implementation axis), hello-java's temurin rationale: a bare
+      # `engine: julia` edge resolves to the NEWEST satisfying runtime
+      # across every flavor the registries offer — the pin keeps the
+      # sample deterministic.
+      runtime_requirement:
+        engine: julia
+        implementation: julia
+        constraint: ">= 1.13, < 2.0"
+  platforms: []                   # filled by tools/build from the leg's
+                                  # triplet (the template stays parseable)
+  capabilities: {exec: true, read: true}
+requires:
+  - kind: language
+    engine: julia
+    implementation: julia
+    constraint: ">= 1.13, < 2.0"
+checks:
+  run:
+    entry: /app/hello.jl
+    argv: []
+    expect: {exit: 0}
+    timeout: 60

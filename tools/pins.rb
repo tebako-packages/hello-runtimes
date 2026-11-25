@@ -18,7 +18,11 @@
 #                         host-local; ci.hosts stays the runner SSOT)
 #   --engine-registries   the factory registry refs (tfs:github:<factory>)
 #                         the engine-surface leg configures — the distinct
-#                         apps.*.factory set, never a hand-written copy
+#                         apps.*.factory set of the apps WITH legs (a
+#                         dormant app's factory joins on its platforms
+#                         flip), never a hand-written copy
+#   --platforms APP       the app's declared leg triplets, space-separated
+#                         (the engine surface's per-engine coverage gates)
 #   --env APP TRIPLET     the leg's env (KEY=value lines for GITHUB_ENV)
 #   --runtimes APP        "<version> <tebako> <release>" per line (the
 #                         leg's stage+smoke loop)
@@ -120,9 +124,21 @@ when "--press-matrix"
     { "triplet" => triplet, "runner" => RECIPE.fetch("ci").fetch("hosts").fetch(triplet) }
   end.then { |include| puts JSON.generate({ "include" => include }) }
 when "--engine-registries"
-  RECIPE.fetch("apps").values.map { |spec| spec.fetch("factory") }.uniq.each do |factory|
+  # The factories of every app WITH legs (an app with an empty platforms
+  # list is declared-but-dormant — hello-dotnet pre-publish: its factory
+  # registry does not exist yet, and configuring it would make every
+  # engine-surface leg's doctor flag the unreadable registry). The
+  # dormant app's factory JOINS the list with the same platforms flip
+  # that activates its legs.
+  RECIPE.fetch("apps").values.select { |spec| spec.fetch("platforms").any? }
+    .map { |spec| spec.fetch("factory") }.uniq.each do |factory|
     puts "tfs:github:#{factory}"
   end
+when "--platforms"
+  # The app's declared leg triplets (space-separated) — the engine
+  # surface's per-engine coverage gates read the same SSOT the leg
+  # matrix does.
+  puts RECIPE.fetch("apps").fetch(ARGV[1]).fetch("platforms").join(" ")
 when "--env"
   leg = legs.find { |l| l["app"] == ARGV[1] && l["triplet"] == ARGV[2] } or
     abort("pins: no leg for app=#{ARGV[1]} triplet=#{ARGV[2]}")
@@ -192,5 +208,5 @@ when "--installer-sources"
     src.fetch("files").each { |path, sha| puts [repo, ref, path, sha].join("\t") }
   end
 else
-  abort "usage: ruby tools/pins.rb [--matrix | --engine-matrix | --engine-registries | --env APP TRIPLET | --runtimes APP | --payload-args APP | --installer-env lean|fat | --installer-sources]"
+  abort "usage: ruby tools/pins.rb [--matrix | --engine-matrix | --engine-registries | --platforms APP | --env APP TRIPLET | --runtimes APP | --payload-args APP | --installer-env lean|fat | --installer-sources]"
 end

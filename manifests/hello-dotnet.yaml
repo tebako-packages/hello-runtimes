@@ -1,0 +1,50 @@
+schema_version: 1
+# Payload manifest for hello-dotnet (spec 03 §2.2; filled by tools/build).
+# The arm is DORMANT today — it activates on the dotnet factory's first
+# publish (the Tebakofile entry names the flip).
+identity:
+  schema_version: 1
+  kind: app
+  name: "hello-dotnet"
+  version: "@@VERSION@@"
+  producer: {tool: feedstock-build, tool_version: "1"}
+  created: "@@CREATED@@"                      # pinned at release time
+  source:
+    commit: "@@FEEDSTOCK_SHA@@"
+    builder: "@@BUILDER@@"                    # "gha:run:<id>" on CI builds
+  digest:
+    tree_hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"  # placeholder until the CAS lands (spec 03)
+    blob_sha256: "@@BLOB_SHA256@@"
+  signing: {state: unsigned}
+  encryption: {state: none}
+  annotations: {sample: hello-runtimes, runtime: dotnet}
+provides:
+  entrypoints:
+    - name: hello-dotnet
+      # The entry is the compiled framework-dependent dll (the java arm's
+      # jar precedent — the leg compiles the app's own source with the
+      # runner's hosted SDK); the wrapper composes
+      # [dotnet, /app/hello.dll, <user args…>] (spec 29 §1).
+      path: /app/hello.dll
+      args_default: []
+      # Pinned to the factory's own implementation (`dotnet` — spec 28
+      # §8's implementation axis; Microsoft's official SDK builds are the
+      # factory's only flavor today).
+      runtime_requirement:
+        engine: dotnet
+        implementation: dotnet
+        constraint: ">= 10, < 11"
+  platforms: []                   # filled by tools/build from the leg's
+                                  # triplet (the template stays parseable)
+  capabilities: {exec: true, read: true}
+requires:
+  - kind: language
+    engine: dotnet
+    implementation: dotnet
+    constraint: ">= 10, < 11"
+checks:
+  run:
+    entry: /app/hello.dll
+    argv: []
+    expect: {exit: 0}
+    timeout: 60

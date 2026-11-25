@@ -52,7 +52,7 @@ step "assemble the $APP payload tree"
 PAYLOAD="$WORK/payload"
 rm -rf "$PAYLOAD"
 mkdir -p "$PAYLOAD/app" "$PAYLOAD/__tpkg__"
-if [ -d "$FEEDSTOCK/apps/$APP/src" ]; then
+if [ -d "$FEEDSTOCK/apps/$APP/src" ] && compgen -G "$FEEDSTOCK/apps/$APP/src/*.java" >/dev/null; then
   # The java app: compile OUR OWN source with the runner's hosted JDK
   # and ship the jar (JRE-class runtime — no source launch). JAVA_HOME
   # discovery: the hosted-toolcache 21 line first (x64 + arm64 spellings),
@@ -71,6 +71,17 @@ if [ -d "$FEEDSTOCK/apps/$APP/src" ]; then
   "$JH/bin/javac" --release 21 -d "$WORK/classes" "$FEEDSTOCK/apps/$APP/src/Hello.java"
   # cfe: jar with the Main-Class manifest entry (the -jar entry needs it).
   "$JH/bin/jar" cfe "$PAYLOAD/app/hello.jar" Hello -C "$WORK/classes" .
+elif [ -d "$FEEDSTOCK/apps/$APP/src" ] && compgen -G "$FEEDSTOCK/apps/$APP/src/*.csproj" >/dev/null; then
+  # The dotnet app (DORMANT until the factory's first publish activates
+  # the legs): compile OUR OWN source with the runner's hosted .NET SDK
+  # (audience law 3 — the same class as the java arm's hosted JDK) into a
+  # framework-dependent dll riding the runtime's shared framework. A
+  # dotnet app on a dotnet-less runner is a named error.
+  step "compile the framework-dependent dll (hosted .NET SDK, net10.0 matches the >= 10, < 11 constraint)"
+  command -v dotnet >/dev/null 2>&1 || die "no dotnet CLI on PATH (a dotnet leg needs the hosted SDK — the workflow's setup-dotnet step)"
+  dotnet publish "$FEEDSTOCK/apps/$APP/src/hello.csproj" -c Release -o "$WORK/publish" --nologo
+  [ -f "$WORK/publish/hello.dll" ] || die "dotnet publish produced no hello.dll under $WORK/publish"
+  cp "$WORK/publish/hello.dll" "$PAYLOAD/app/hello.dll"
 elif [ -d "$FEEDSTOCK/apps/$APP/gemhome" ]; then
   # Extension slices (spec 03 §2.8): an app dir carrying gemhome/ is a
   # toolkit slice whose image root IS the mini GEM_HOME (gems/ +
