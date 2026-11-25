@@ -432,12 +432,13 @@ jobs:
     # surface (`tebako install <engine>` → dispatch through the
     # registered shim → `shim list` / `doctor` answering the runtime-own
     # class). The census engines (php, julia, r) ride the same surface,
-    # platform-gated to the triplets their factories publish (r's script
-    # probe gates off on macOS until the factory's entitlement-fixed
-    # re-publish — tebako-runtime-r#5). The engines resolve against the
-    # factory registries the leg configures (spec 04 — no default
-    # registry exists) and the CLI downloads + verifies + caches the
-    # published runtime pairs itself.
+    # platform-gated to the triplets their factories publish (the v0.1.1
+    # pairs carry the allow-dyld-environment-variables grant — every
+    # probe runs on every covered triplet; the v0.1.0 macOS gates are
+    # history: tebako-runtime-r#5, tebako-runtime-php#7). The engines
+    # resolve against the factory registries the leg configures (spec
+    # 04 — no default registry exists) and the CLI downloads + verifies
+    # + caches the published runtime pairs itself.
     #
     # No windows-arm64 leg: the engines cover the triplet (node, openjdk,
     # bun, python, ruby all publish aarch64-windows-ucrt pairs) but the

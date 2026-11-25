@@ -30,22 +30,17 @@
 #     ref). The gate flips red the day the publish lands AND the
 #     Tebakofile arm's platforms flip joins the factory to the list —
 #     replace it with the real dispatch arm then.
-#   * The census engines (php, julia, r — the v0.1.0 census wave): bare
+#   * The census engines (php, julia, r — the v0.1.x census wave): bare
 #     form + a real script probe each, platform-gated to the triplets the
 #     factories publish (php/r ship no windows and no gnu-arm64 pair;
 #     julia adds windows-ucrt64; the suite has no musl runner tier). An
-#     uncovered leg prints the named skip, never a guess. Two macOS
-#     gates ride the published v0.1.0 pairs (both signed without the
-#     allow-dyld-environment-variables grant, so the preload-shim re-exec
-#     runs shimless on macOS 14 — the runner pool's macos-15 tolerance is
-#     not the proof; a green leg must hold on every supported macOS):
-#     r's SCRIPT probe gates off (the interpreter's own boot reads the
-#     mounted base library — "unable to open the base package",
-#     tebako-runtime-r#5, fixed source-side as tebako-runtime-r#6 after
-#     the publish), while php's inline -r probes are unaffected (the
-#     interpreter's boot reads nothing from the image) and only the FILE
-#     class gates — at the payload arm (tebako-runtime-php#7). Both open
-#     with the factories' entitlement-fixed re-publishes.
+#     uncovered leg prints the named skip, never a guess. Historical:
+#     the v0.1.0 macOS pairs of php and r were signed without the
+#     allow-dyld-environment-variables grant, so the preload-shim
+#     re-exec ran shimless on macOS 14 (r's script probe and php's FILE
+#     class gated off — tebako-runtime-r#5, tebako-runtime-php#7); the
+#     v0.1.1 pairs carry the grant and every probe runs on every
+#     covered triplet.
 #   * The shim surface: `tebako install <engine>` (bare → the default
 #     entry's shim) and `tebako install java:keytool` / `python:pip` (the
 #     command form), dispatch through the registered shims, `tebako shim
@@ -88,14 +83,14 @@
 #           named form.
 #   bun     bare + bunx (declared on every platform; bunx is the same
 #           static binary re-entrant under its alias).
-#   php     bare only — the v0.1.0 env image declares NO entrypoints (the
+#   php     bare only — the v0.1.x env image declares NO entrypoints (the
 #           spawn surface arrives with the factory's composer-lane
 #           increment), so the bare form's default entry IS the
 #           interpreter; the json_encode probe proves the extension
 #           surface boots (json is core, always present).
 #   julia   bare only — the v0.1.0 env image declares the ONE entrypoint
 #           (julia); the bare form's default resolves to it.
-#   r       bare only — the v0.1.0 env image declares NO entrypoints (the
+#   r       bare only — the v0.1.x env image declares NO entrypoints (the
 #           spawn surface arrives with the CRAN-closure increment); the
 #           exe's front-end is Rscript-shaped, so --version/-e ride the
 #           Rscript grammar.
@@ -203,28 +198,13 @@ TRAP_PATH="$TRAP_DIR:/usr/bin:/bin"
 # covered <app>: the leg's triplet is in the app's declared platforms
 # (the Tebakofile is the SSOT — the same list the leg matrix reads; an
 # app narrowed on a factory defect narrows the surface arm with it).
+# The census arms' coverage IS their payload legs (spec 00 §10: a second
+# hand-written copy of the same triplet list is a bug on arrival — the
+# v0.1.0 era needed a wider factory list here because the payload legs
+# gated around the macOS entitlement defect; v0.1.1 closed that gap).
 covered() {
   local platforms; platforms="$(ruby tools/pins.rb --platforms "$1")"
   case " $platforms " in *" $TRIPLET "*) return 0 ;; *) return 1 ;; esac
-}
-
-# The runtime-own coverage of the census FACTORIES' published pairs
-# (wider than the payload legs for php and r: the payload smoke
-# dispatches a script FILE through the mount, which the published v0.1.0
-# macOS pairs cannot serve — tebako-runtime-php#7, tebako-runtime-r#5 —
-# while the install + bare-dispatch surface works there: php's boot
-# reads nothing from the image, so --version and inline -r run shimless;
-# r's --version is the fast path that never touches R). Sourced from the
-# factory registries' v0.1.0 rows (2026-11); the musl pairs have no
-# runner tier in this suite; julia's coverage IS its payload legs (the
-# exec-cache shape has no shimless class).
-PHP_FACTORY_PLATFORMS="x86_64-linux-gnu x86_64-macos aarch64-macos"
-php_factory_covered() {
-  case " $PHP_FACTORY_PLATFORMS " in *" $TRIPLET "*) return 0 ;; *) return 1 ;; esac
-}
-R_FACTORY_PLATFORMS="x86_64-linux-gnu x86_64-macos aarch64-macos"
-r_factory_covered() {
-  case " $R_FACTORY_PLATFORMS " in *" $TRIPLET "*) return 0 ;; *) return 1 ;; esac
 }
 
 say "store config: the ten factory registries; the temurin pin rides the env link"
@@ -300,7 +280,7 @@ run_ok '^[0-9]+\.[0-9]+\.[0-9]+' run bun --version
 run_ok '^[0-9]+\.[0-9]+\.[0-9]+' run bun:bunx --version
 
 say "engine: php (bare + script + the extension surface)"
-if php_factory_covered; then
+if covered hello-php; then
   run_wire_ok '^PHP 8\.4\.' run php --version
   run_ok '^hello-php-probe$' run php -r 'echo "hello-php-probe\n";'
   # json_encode — a core extension, always present since php 8.0 (the
@@ -309,13 +289,8 @@ if php_factory_covered; then
   # increment lands the spawn surface later) — there is no
   # package-manager probe for php today, by the factory's design.
   run_ok '^ext json: \{"probe":"ok"\}$' run php -r 'echo "ext json: ", json_encode(["probe" => "ok"]), "\n";'
-  case "$TRIPLET" in
-    *-macos)
-      say "engine: php — the inline -r surface is unaffected on macOS, but the FILE class (a payload's script opened through the mount) gates at the PAYLOAD arm: the published v0.1.0 pair's signed exe lacks the allow-dyld-environment-variables grant, so a mounted file dies shimless on macOS 14 (tebako-runtime-php#7). hello-php's legs join with the factory's entitlement-fixed re-publish."
-      ;;
-  esac
 else
-  say "engine: php — skipped on $TRIPLET (the factory publishes no $TRIPLET pair today; the arm covers: $PHP_FACTORY_PLATFORMS)"
+  say "engine: php — skipped on $TRIPLET (the factory publishes no $TRIPLET pair today; the arm covers: $(ruby tools/pins.rb --platforms hello-php))"
 fi
 
 say "engine: julia (bare + script)"
@@ -327,18 +302,11 @@ else
 fi
 
 say "engine: r (bare — the Rscript-shaped front-end)"
-if r_factory_covered; then
+if covered hello-r; then
   run_wire_ok '^Rscript \(R\) version 4\.6' run r --version
-  case "$TRIPLET" in
-    *-macos)
-      say "engine: r — the script surface gates off on macOS (tebako-runtime-r#5: the published v0.1.0 pair's signed exe lacks the allow-dyld-environment-variables grant, so scripts die shimless on macOS 14 — and a green leg must hold on every supported macOS, not only on this runner pool's tolerance. The fix merged source-side as tebako-runtime-r#6; this gate opens with the factory's re-published pair)"
-      ;;
-    *)
-      run_ok '^hello-r-probe$' run r -e 'cat("hello-r-probe\n")'
-      ;;
-  esac
+  run_ok '^hello-r-probe$' run r -e 'cat("hello-r-probe\n")'
 else
-  say "engine: r — skipped on $TRIPLET (the factory publishes no $TRIPLET pair today; the arm covers: $R_FACTORY_PLATFORMS)"
+  say "engine: r — skipped on $TRIPLET (the factory publishes no $TRIPLET pair today; the arm covers: $(ruby tools/pins.rb --platforms hello-r))"
 fi
 
 say "named errors: the no-such-engine and undeclared-entrypoint shapes"
@@ -377,7 +345,7 @@ say "the shim surface: install (bare + command forms), dispatch, list, doctor"
 # assertions below compute from this set — never a hand-written count.
 OWN_NAMES=(ruby node keytool pip)
 OWN_ENGINES=(ruby node java python)
-if php_factory_covered; then
+if covered hello-php; then
   "$TEBAKO" install php
   OWN_NAMES+=(php); OWN_ENGINES+=(php)
 fi
@@ -385,7 +353,7 @@ if covered hello-julia; then
   "$TEBAKO" install julia
   OWN_NAMES+=(julia); OWN_ENGINES+=(julia)
 fi
-if r_factory_covered; then
+if covered hello-r; then
   "$TEBAKO" install r
   OWN_NAMES+=(r); OWN_ENGINES+=(r)
 fi
@@ -410,7 +378,7 @@ run_shim_ok '^pip [0-9]' pip --version
 # The covered census engines' shims dispatch the same programs the run
 # arms did — install → registry resolution → the registered shim → the
 # verified output, the task's end-to-end proof per engine.
-if php_factory_covered; then
+if covered hello-php; then
   run_shim_ok '^PHP 8\.4\.' php --version
   run_shim_ok '^shim-php-ok$' php -r 'echo "shim-php-ok\n";'
 fi
@@ -418,14 +386,9 @@ if covered hello-julia; then
   run_shim_ok '^julia version 1\.13' julia --version
   run_shim_ok '^shim-julia-ok$' julia -e 'println("shim-julia-ok")'
 fi
-if r_factory_covered; then
+if covered hello-r; then
   run_shim_ok '^Rscript \(R\) version 4\.6' r --version
-  case "$TRIPLET" in
-    # macOS: the script gate is named at the r run arm above — the shim
-    # proves --version (the fast path) only.
-    *-macos) : ;;
-    *) run_shim_ok '^shim-r-ok$' r -e 'cat("shim-r-ok\n")' ;;
-  esac
+  run_shim_ok '^shim-r-ok$' r -e 'cat("shim-r-ok\n")'
 fi
 
 list_out="$("$TEBAKO" shim list)"

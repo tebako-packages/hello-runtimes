@@ -14,9 +14,9 @@ both payload images and OS-native installers.
 | `hello-truffleruby` | tebako-runtime-truffleruby | `>= 34, < 35`, implementation-pinned to `truffleruby` | linux-gnu x86_64, macOS arm64 (jvm mode) |
 | `hello-node` | tebako-runtime-node | `>= 24`, implementation-pinned to `node` | linux-gnu ×2, macOS ×2, windows-ucrt |
 | `hello-bun` | tebako-runtime-bun | `>= 1.4`, implementation-pinned to `bun` | linux-gnu ×2, macOS ×2, windows-ucrt |
-| `hello-php` | tebako-runtime-php | `>= 8.4, < 9.0`, implementation-pinned to `php` | linux-gnu x86_64 (the macOS legs wait on the factory's entitlement-fixed re-publish — tebako-runtime-php#7; musl pairs have no runner tier here) |
+| `hello-php` | tebako-runtime-php | `>= 8.4, < 9.0`, implementation-pinned to `php` | linux-gnu x86_64, macOS ×2 (musl pairs have no runner tier here) |
 | `hello-julia` | tebako-runtime-julia | `>= 1.13, < 2.0`, implementation-pinned to `julia` | linux-gnu x86_64, macOS ×2, windows-ucrt (the factory's four) |
-| `hello-r` | tebako-runtime-r | `>= 4.6, < 5.0`, implementation-pinned to `r` | linux-gnu x86_64 (the macOS legs wait on the factory's entitlement-fixed re-publish — tebako-runtime-r#5) |
+| `hello-r` | tebako-runtime-r | `>= 4.6, < 5.0`, implementation-pinned to `r` | linux-gnu x86_64, macOS ×2 |
 | `hello-dotnet` | tebako-runtime-dotnet | `>= 10, < 11`, implementation-pinned to `dotnet` | dormant — activates on the factory's first publish |
 
 ## Why this suite exists
@@ -55,20 +55,20 @@ dispatch path, or a signing surface regressed.
   payload needs no compile step — no press-compile, no hosted tsc
   (contrast the java arm's hosted-javac jar).
 - **The census wave.** `hello-php`, `hello-julia`, and `hello-r` ride the
-  v0.1.0 census runtimes — php on the linked-pattern pair (the
+  v0.1.x census runtimes — php on the linked-pattern pair (the
   driver-linked interpreter), julia on the wrapper-pattern pair whose
   home-annotated env image materializes into the exec cache, and r on
   the Rscript-shaped front-end the factory's fs TU carries. `hello-php`
   additionally proves the extension surface boots (`json_encode` — a core
   extension, always present: the composer-class payload's floor; composer
   itself is not in the runtime yet — the factory's composer-lane
-  increment lands it). The macOS legs of `hello-php` and `hello-r` wait
-  on the factories' re-publishes: the v0.1.0 macOS pairs' signed exes
-  lack the allow-dyld-environment-variables grant, so the preload-shim
-  re-exec runs shimless on macOS 14 — php opens no mounted file
-  (tebako-runtime-php#7), r's interpreter does not even boot its base
-  library (tebako-runtime-r#5, fixed source-side as tebako-runtime-r#6,
-  after the publish). `hello-dotnet` is declared but dormant — the
+  increment lands it). php and r ride v0.1.1: the v0.1.0 macOS pairs'
+  signed exes lacked the allow-dyld-environment-variables grant, so the
+  preload-shim re-exec ran shimless on macOS 14 — php opened no mounted
+  file (tebako-runtime-php#7), r's interpreter did not even boot its
+  base library (tebako-runtime-r#5, fixed source-side as
+  tebako-runtime-r#6); the v0.1.1 pairs carry the grant and the macOS
+  legs run the full set. `hello-dotnet` is declared but dormant — the
   factory's six legs build green but publish nothing yet; the arm
   activates on the first publish (the Tebakofile entry names the flip).
 - **Shard-model runtime staging.** `tools/stage_runtime` consumes the
@@ -99,8 +99,7 @@ dispatch path, or a signing surface regressed.
   engines ride the same surface: php, julia, and r run their bare form +
   a real script probe and register their shims on every triplet the
   factories publish (the arms skip with a named note where no pair
-  exists; r's script probe additionally gates off on macOS until the
-  factory's entitlement-fixed re-publish — tebako-runtime-r#5).
+  exists).
   jruby/truffleruby are deliberate skip gates — their factory registries
   carry no `engine:` discovery key today, so the engine surface answers
   69 by design; the gate flips red when a factory renders the key.
