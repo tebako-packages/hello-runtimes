@@ -1,0 +1,50 @@
+schema_version: 1
+# Payload manifest for hello-r (spec 03 §2.2; filled by tools/build).
+identity:
+  schema_version: 1
+  kind: app
+  name: "hello-r"
+  version: "@@VERSION@@"
+  producer: {tool: feedstock-build, tool_version: "1"}
+  created: "@@CREATED@@"                      # pinned at release time
+  source:
+    commit: "@@FEEDSTOCK_SHA@@"
+    builder: "@@BUILDER@@"                    # "gha:run:<id>" on CI builds
+  digest:
+    tree_hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"  # placeholder until the CAS lands (spec 03)
+    blob_sha256: "@@BLOB_SHA256@@"
+  signing: {state: unsigned}
+  encryption: {state: none}
+  annotations: {sample: hello-runtimes, runtime: r}
+provides:
+  entrypoints:
+    - name: hello-r
+      # The entry IS the script; the runtime exe's Rscript-shaped
+      # front-end (the factory's fs TU) routes it as --file= with the
+      # user args on commandArgs(TRUE). Base-only R, copied verbatim —
+      # nothing compiles.
+      path: /app/hello.R
+      args_default: []
+      # Pinned to the factory's own implementation (`r` — spec 28 §8's
+      # implementation axis), hello-java's temurin rationale: a bare
+      # `engine: r` edge resolves to the NEWEST satisfying runtime across
+      # every flavor the registries offer — the pin keeps the sample
+      # deterministic.
+      runtime_requirement:
+        engine: r
+        implementation: r
+        constraint: ">= 4.6, < 5.0"
+  platforms: []                   # filled by tools/build from the leg's
+                                  # triplet (the template stays parseable)
+  capabilities: {exec: true, read: true}
+requires:
+  - kind: language
+    engine: r
+    implementation: r
+    constraint: ">= 4.6, < 5.0"
+checks:
+  run:
+    entry: /app/hello.R
+    argv: []
+    expect: {exit: 0}
+    timeout: 60

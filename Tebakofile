@@ -4,7 +4,7 @@
 # The one-repo-per-package convention bends here by design — this is the
 # reference the docs walk through.
 name: hello-runtimes
-version: "1.0.12"               # every payload in the suite versions together
+version: "1.0.13"               # every payload in the suite versions together
 
 # The pinned tebako toolchain (tfs mkimage + tebako check/publish),
 # digest-pinned per platform against the release's own SHA256SUMS (the
@@ -128,6 +128,74 @@ apps:
     runtimes:
       - {version: "1.4.3", tebako: "2.8.47", release: "v2.8.47"}
     platforms: [x86_64-linux-gnu, aarch64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
+  hello-php:
+    # The first census-runtime arm (the v0.1.0 census wave): php 8.4 on
+    # the linked-pattern pair (the driver-linked interpreter exe + the
+    # stdlib env image). The entry is plain php, copied verbatim; the app
+    # additionally proves the extension surface boots (json_encode — a
+    # core extension, always present: the composer-class payload's floor).
+    engine: php
+    factory: tamatebako/tebako-runtime-php
+    runtimes:
+      - {version: "8.4.28", tebako: "0.1.0", release: "v0.1.0"}
+    # The published v0.1.0 macOS pairs run the interpreter inline (-r)
+    # but die on FILE dispatch ("Could not open input file" — the signed
+    # exe lacks the allow-dyld-environment-variables grant, so the
+    # preload-shim re-exec runs shimless on macOS 14 and the unpatched
+    # interpreter cannot see the mounted payload:
+    # tamatebako/tebako-runtime-php#7). The macOS legs join on the
+    # factory's entitlement-fixed re-publish (a green leg must hold on
+    # every supported macOS, not the runner pool's tolerance). The musl
+    # pairs have no runner tier in this suite; no windows pair exists.
+    platforms: [x86_64-linux-gnu]
+  hello-julia:
+    # julia 1.13 on the wrapper-pattern pair (the launcher exe + the
+    # home-annotated env image — the whole SDK tree materializes into the
+    # exec cache on first boot, the openjdk precedent).
+    engine: julia
+    factory: tamatebako/tebako-runtime-julia
+    runtimes:
+      - {version: "1.13.4", tebako: "0.1.0", release: "v0.1.0"}
+    # The julia factory ships exactly these four (linux-gnu-x86_64,
+    # macos ×2, windows-ucrt64) — a gnu-arm64 leg joins when the factory
+    # ships the package.
+    platforms: [x86_64-linux-gnu, x86_64-macos, aarch64-macos, x86_64-windows-ucrt]
+  hello-r:
+    # R 4.6 on the linked-pattern pair whose exe front-end is
+    # Rscript-shaped (the factory's fs TU carries the Rscript
+    # translation — upstream's Rscript shell launcher cannot work inside
+    # the VFS).
+    engine: r
+    factory: tamatebako/tebako-runtime-r
+    runtimes:
+      - {version: "4.6.2", tebako: "0.1.0", release: "v0.1.0"}
+    # The published v0.1.0 macOS pairs boot --version but die on script
+    # execution ("unable to open the base package" — the signed exe lacks
+    # the allow-dyld-environment-variables grant, so the preload-shim
+    # re-exec runs shimless on macOS 14: tamatebako/tebako-runtime-r#5).
+    # The source fix merged (tebako-runtime-r#6) AFTER the v0.1.0 publish
+    # — the macOS legs join on the factory's entitlement-fixed
+    # re-publish. The musl pairs have no runner tier in this suite; no
+    # windows pair exists.
+    platforms: [x86_64-linux-gnu]
+  hello-dotnet:
+    # The .NET SDK arm — DECLARED, DORMANT: the factory's six legs
+    # (linux-gnu x86_64, linux-musl x86_64, macOS ×2, windows-ucrt ×2)
+    # build green but NOTHING is published yet (no release, no registry
+    # rows — tamatebako/tebako-runtime-dotnet's first publish is the
+    # owner's explicit act). The arm ACTIVATES on that publish: pin the
+    # released line in `runtimes`, flip `platforms` to the published
+    # triplets, and add the app to the publish job's loops (the engine-
+    # surface skip gate in tools/engine_surface flips red on purpose the
+    # day the registry renders the engine key). The payload shape mirrors
+    # the java arm: the leg compiles the app's own source with the
+    # runner's hosted SDK (actions/setup-dotnet — gated on the engine
+    # facet like setup-java) into a framework-dependent dll riding the
+    # runtime's shared framework.
+    engine: dotnet
+    factory: tamatebako/tebako-runtime-dotnet
+    runtimes: []
+    platforms: []
   hello-flavor-acme:
     # The reference EXTENSION slice (spec 03 §2.8): toolkit-kind content
     # that augments hello-ruby (the reverse edge is in its manifest, not
