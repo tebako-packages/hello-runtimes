@@ -4,7 +4,7 @@
 # The one-repo-per-package convention bends here by design — this is the
 # reference the docs walk through.
 name: hello-runtimes
-version: "1.0.13"               # every payload in the suite versions together
+version: "1.0.14"               # every payload in the suite versions together
 
 # The pinned tebako toolchain (tfs mkimage + tebako check/publish),
 # digest-pinned per platform against the release's own SHA256SUMS (the
@@ -137,17 +137,15 @@ apps:
     engine: php
     factory: tamatebako/tebako-runtime-php
     runtimes:
-      - {version: "8.4.28", tebako: "0.1.0", release: "v0.1.0"}
-    # The published v0.1.0 macOS pairs run the interpreter inline (-r)
-    # but die on FILE dispatch ("Could not open input file" — the signed
-    # exe lacks the allow-dyld-environment-variables grant, so the
-    # preload-shim re-exec runs shimless on macOS 14 and the unpatched
-    # interpreter cannot see the mounted payload:
-    # tamatebako/tebako-runtime-php#7). The macOS legs join on the
-    # factory's entitlement-fixed re-publish (a green leg must hold on
-    # every supported macOS, not the runner pool's tolerance). The musl
-    # pairs have no runner tier in this suite; no windows pair exists.
-    platforms: [x86_64-linux-gnu]
+      - {version: "8.4.28", tebako: "0.1.1", release: "v0.1.1"}
+    # The macOS legs ride v0.1.1: the published v0.1.0 macOS pairs were
+    # signed without the allow-dyld-environment-variables grant, so the
+    # preload-shim re-exec ran shimless on macOS 14 and FILE dispatch
+    # died ("Could not open input file" — tamatebako/tebako-runtime-php#7);
+    # v0.1.1 carries the grant (verified locally: is_dir('/__tfs__') is
+    # true and the mounted script runs). The musl pairs have no runner
+    # tier in this suite; no windows pair exists.
+    platforms: [x86_64-linux-gnu, x86_64-macos, aarch64-macos]
   hello-julia:
     # julia 1.13 on the wrapper-pattern pair (the launcher exe + the
     # home-annotated env image — the whole SDK tree materializes into the
@@ -168,16 +166,17 @@ apps:
     engine: r
     factory: tamatebako/tebako-runtime-r
     runtimes:
-      - {version: "4.6.2", tebako: "0.1.0", release: "v0.1.0"}
-    # The published v0.1.0 macOS pairs boot --version but die on script
-    # execution ("unable to open the base package" — the signed exe lacks
-    # the allow-dyld-environment-variables grant, so the preload-shim
-    # re-exec runs shimless on macOS 14: tamatebako/tebako-runtime-r#5).
-    # The source fix merged (tebako-runtime-r#6) AFTER the v0.1.0 publish
-    # — the macOS legs join on the factory's entitlement-fixed
-    # re-publish. The musl pairs have no runner tier in this suite; no
-    # windows pair exists.
-    platforms: [x86_64-linux-gnu]
+      - {version: "4.6.2", tebako: "0.1.1", release: "v0.1.1"}
+    # The macOS legs ride v0.1.1: the published v0.1.0 macOS pairs were
+    # signed without the allow-dyld-environment-variables grant, so the
+    # preload-shim re-exec ran shimless on macOS 14 and scripts died at
+    # boot ("unable to open the base package" —
+    # tamatebako/tebako-runtime-r#5; the source fix merged as
+    # tebako-runtime-r#6 after the v0.1.0 publish). v0.1.1 carries the
+    # grant (verified locally: the -e base-package probe prints). The
+    # musl pairs have no runner tier in this suite; no windows pair
+    # exists.
+    platforms: [x86_64-linux-gnu, x86_64-macos, aarch64-macos]
   hello-dotnet:
     # The .NET SDK arm — DECLARED, DORMANT: the factory's six legs
     # (linux-gnu x86_64, linux-musl x86_64, macOS ×2, windows-ucrt ×2)
