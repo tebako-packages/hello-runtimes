@@ -4,7 +4,7 @@
 # The one-repo-per-package convention bends here by design — this is the
 # reference the docs walk through.
 name: hello-runtimes
-version: "1.0.14"               # every payload in the suite versions together
+version: "1.0.15"               # every payload in the suite versions together
 
 # The pinned tebako toolchain (tfs mkimage + tebako check/publish),
 # digest-pinned per platform against the release's own SHA256SUMS (the
@@ -178,23 +178,23 @@ apps:
     # exists.
     platforms: [x86_64-linux-gnu, x86_64-macos, aarch64-macos]
   hello-dotnet:
-    # The .NET SDK arm — DECLARED, DORMANT: the factory's six legs
-    # (linux-gnu x86_64, linux-musl x86_64, macOS ×2, windows-ucrt ×2)
-    # build green but NOTHING is published yet (no release, no registry
-    # rows — tamatebako/tebako-runtime-dotnet's first publish is the
-    # owner's explicit act). The arm ACTIVATES on that publish: pin the
-    # released line in `runtimes`, flip `platforms` to the published
-    # triplets, and add the app to the publish job's loops (the engine-
-    # surface skip gate in tools/engine_surface flips red on purpose the
-    # day the registry renders the engine key). The payload shape mirrors
-    # the java arm: the leg compiles the app's own source with the
-    # runner's hosted SDK (actions/setup-dotnet — gated on the engine
-    # facet like setup-java) into a framework-dependent dll riding the
-    # runtime's shared framework.
+    # The .NET SDK arm — ACTIVATED 2026-11-26 on the factory's first
+    # publish (v2.8.83, 84 assets, signed; registry row on main with the
+    # engine key; both installed-pair acceptance legs green). The pin
+    # keys the composite version's two segments: the SDK line and the
+    # factory's release line (the registry's composite spelling is
+    # 10.0.404-2.8.83). Platforms are the published triplets the suite
+    # has a runner tier for — the factory also ships linux-musl x86_64
+    # and windows-ucrt-arm64; this suite has neither tier. The payload
+    # shape mirrors the java arm: the leg compiles the app's own source
+    # with the runner's hosted SDK (actions/setup-dotnet — gated on the
+    # engine facet like setup-java) into a framework-dependent dll
+    # riding the runtime's shared framework.
     engine: dotnet
     factory: tamatebako/tebako-runtime-dotnet
-    runtimes: []
-    platforms: []
+    runtimes:
+      - {version: "10.0.404", tebako: "2.8.83", release: "v2.8.83"}
+    platforms: [x86_64-linux-gnu, aarch64-macos, x86_64-macos, x86_64-windows-ucrt]
   hello-flavor-acme:
     # The reference EXTENSION slice (spec 03 §2.8): toolkit-kind content
     # that augments hello-ruby (the reverse edge is in its manifest, not
