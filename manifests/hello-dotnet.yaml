@@ -1,7 +1,7 @@
 schema_version: 1
 # Payload manifest for hello-dotnet (spec 03 §2.2; filled by tools/build).
-# The arm is DORMANT today — it activates on the dotnet factory's first
-# publish (the Tebakofile entry names the flip).
+# The arm is ACTIVE since 2026-11-26 (the dotnet factory's first publish,
+# v2.8.83 — the Tebakofile entry carries the pin).
 identity:
   schema_version: 1
   kind: app
