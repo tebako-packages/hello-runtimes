@@ -193,7 +193,7 @@ apps:
     engine: dotnet
     factory: tamatebako/tebako-runtime-dotnet
     runtimes:
-      - {version: "10.0.404", tebako: "2.8.83", release: "v2.8.83"}
+      - {version: "10.0.404", tebako: "2.8.86", release: "v2.8.86"}
     platforms: [x86_64-linux-gnu, aarch64-macos, x86_64-macos, x86_64-windows-ucrt]
   hello-flavor-acme:
     # The reference EXTENSION slice (spec 03 §2.8): toolkit-kind content
