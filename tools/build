@@ -72,16 +72,21 @@ if [ -d "$FEEDSTOCK/apps/$APP/src" ] && compgen -G "$FEEDSTOCK/apps/$APP/src/*.j
   # cfe: jar with the Main-Class manifest entry (the -jar entry needs it).
   "$JH/bin/jar" cfe "$PAYLOAD/app/hello.jar" Hello -C "$WORK/classes" .
 elif [ -d "$FEEDSTOCK/apps/$APP/src" ] && compgen -G "$FEEDSTOCK/apps/$APP/src/*.csproj" >/dev/null; then
-  # The dotnet app (DORMANT until the factory's first publish activates
-  # the legs): compile OUR OWN source with the runner's hosted .NET SDK
-  # (audience law 3 — the same class as the java arm's hosted JDK) into a
-  # framework-dependent dll riding the runtime's shared framework. A
-  # dotnet app on a dotnet-less runner is a named error.
+  # The dotnet app: compile OUR OWN source with the runner's hosted .NET
+  # SDK (audience law 3 — the same class as the java arm's hosted JDK)
+  # into a framework-dependent dll riding the runtime's shared
+  # framework. A dotnet app on a dotnet-less runner is a named error.
   step "compile the framework-dependent dll (hosted .NET SDK, net10.0 matches the >= 10, < 11 constraint)"
   command -v dotnet >/dev/null 2>&1 || die "no dotnet CLI on PATH (a dotnet leg needs the hosted SDK — the workflow's setup-dotnet step)"
   dotnet publish "$FEEDSTOCK/apps/$APP/src/hello.csproj" -c Release -o "$WORK/publish" --nologo
-  [ -f "$WORK/publish/hello.dll" ] || die "dotnet publish produced no hello.dll under $WORK/publish"
-  cp "$WORK/publish/hello.dll" "$PAYLOAD/app/hello.dll"
+  # The muxer's resolution is apphost-relative: framework-dependent needs
+  # the runtimeconfig beside the dll (without it the apphost assumes
+  # self-contained and dies on the missing libhostpolicy — the 2026-11-27
+  # CI legs' "library 'libhostpolicy.dylib' required … not found").
+  for f in hello.dll hello.runtimeconfig.json hello.deps.json; do
+    [ -f "$WORK/publish/$f" ] || die "dotnet publish produced no $f under $WORK/publish"
+    cp "$WORK/publish/$f" "$PAYLOAD/app/$f"
+  done
 elif [ -d "$FEEDSTOCK/apps/$APP/gemhome" ]; then
   # Extension slices (spec 03 §2.8): an app dir carrying gemhome/ is a
   # toolkit slice whose image root IS the mini GEM_HOME (gems/ +

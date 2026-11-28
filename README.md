@@ -17,7 +17,7 @@ both payload images and OS-native installers.
 | `hello-php` | tebako-runtime-php | `>= 8.4, < 9.0`, implementation-pinned to `php` | linux-gnu x86_64, macOS ×2 (musl pairs have no runner tier here) |
 | `hello-julia` | tebako-runtime-julia | `>= 1.13, < 2.0`, implementation-pinned to `julia` | linux-gnu x86_64, macOS ×2, windows-ucrt (the factory's four) |
 | `hello-r` | tebako-runtime-r | `>= 4.6, < 5.0`, implementation-pinned to `r` | linux-gnu x86_64, macOS ×2 |
-| `hello-dotnet` | tebako-runtime-dotnet | `>= 10, < 11`, implementation-pinned to `dotnet` | dormant — activates on the factory's first publish |
+| `hello-dotnet` | tebako-runtime-dotnet | `>= 10, < 11`, implementation-pinned to `dotnet` | active (v2.8.83 since 2026-11-26) |
 
 ## Why this suite exists
 
@@ -68,9 +68,10 @@ dispatch path, or a signing surface regressed.
   file (tebako-runtime-php#7), r's interpreter did not even boot its
   base library (tebako-runtime-r#5, fixed source-side as
   tebako-runtime-r#6); the v0.1.1 pairs carry the grant and the macOS
-  legs run the full set. `hello-dotnet` is declared but dormant — the
-  factory's six legs build green but publish nothing yet; the arm
-  activates on the first publish (the Tebakofile entry names the flip).
+  legs run the full set. `hello-dotnet` joined 2026-11-26 on the
+  factory's first publish (v2.8.83 — the registry renders the engine
+  key and both installed-pair acceptance legs pass): the bare
+  `--version` probe runs on every covered triplet.
 - **Shard-model runtime staging.** `tools/stage_runtime` consumes the
   factories' per-leg shard releases (manifest shards + per-asset
   sidecars + `.asc`), verifies every staged byte three ways, and derives
@@ -103,10 +104,9 @@ dispatch path, or a signing surface regressed.
   jruby/truffleruby are deliberate skip gates — their factory registries
   carry no `engine:` discovery key today, so the engine surface answers
   69 by design; the gate flips red when a factory renders the key.
-  dotnet is a skip gate of the same class: the factory's first publish
-  is pending (no release, no registry rows), and the gate flips red when
-  the publish lands and the dormant `hello-dotnet` arm's platforms flip
-  joins the factory to the leg's registry set.
+  dotnet rides its own arm since 2026-11-26 (v2.8.83): the factory
+  publishes and the registry renders the engine key, so the surface
+  runs the bare `--version` probe on every triplet the arm covers.
 
 ## Layout
 

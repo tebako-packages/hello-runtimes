@@ -425,10 +425,10 @@ jobs:
     # `tebako run <engine>:<command>`, the named errors (69
     # no-such-engine, 65 undeclared-entrypoint), the jruby/truffleruby
     # skip gates (their factory registries carry no `engine:` discovery
-    # key today — the gate flips red when one lands), the dotnet skip
-    # gate (the factory's first publish is pending — no release, no
-    # registry rows; the dormant hello-dotnet arm keeps its factory out
-    # of the leg's registry set until its platforms flip), and the shim
+    # key today — the gate flips red when one lands), the dotnet arm
+    # (ACTIVATED 2026-11-26 on the factory's first publish v2.8.83: the
+    # bare `--version` probe per triplet the arm covers; the dormant
+    # era's exit-69 gate is history), and the shim
     # surface (`tebako install <engine>` → dispatch through the
     # registered shim → `shim list` / `doctor` answering the runtime-own
     # class). The census engines (php, julia, r) ride the same surface,
@@ -1050,7 +1050,7 @@ jobs:
       - name: Stage the publish-verify mirror (each engine's first line)
         run: |
           set -euo pipefail
-          for app in hello-ruby hello-python hello-java hello-node hello-bun hello-php hello-julia hello-r; do
+          for app in hello-ruby hello-python hello-java hello-node hello-bun hello-php hello-julia hello-r hello-dotnet; do
             read -r rt_v rt_tb rt_rel < <(ruby tools/pins.rb --runtimes "$app" | head -1)
             RT_V="$rt_v" RT_TEBAKO="$rt_tb" RELEASE_TAG="$rt_rel" \
               FACTORY_REPO="$(ruby -ryaml -e "puts YAML.load_file('Tebakofile').dig('apps', '$app', 'factory')")" \
@@ -1071,7 +1071,7 @@ jobs:
           mkdir -p "$HOME/.tebako"
           {
             echo "runtimes:"
-            for app in hello-ruby hello-python hello-java hello-node hello-bun hello-php hello-julia hello-r; do
+            for app in hello-ruby hello-python hello-java hello-node hello-bun hello-php hello-julia hello-r hello-dotnet; do
               engine="$(ruby -ryaml -e "puts YAML.load_file('Tebakofile').dig('apps', '$app', 'engine')")"
               read -r rt_v rt_tb rt_rel < <(ruby tools/pins.rb --runtimes "$app" | head -1)
               printf '  %s: {version: "%s", tebako: "%s"}\n' "$engine" "$rt_v" "$rt_tb"
@@ -1133,7 +1133,7 @@ jobs:
             chmod 600 ~/.docker/config.json
           fi
           mirror="$(mktemp -d)"
-          for app in hello-ruby hello-python hello-java hello-node hello-bun hello-php hello-julia hello-r hello-flavor-acme hello-jruby hello-truffleruby; do
+          for app in hello-ruby hello-python hello-java hello-node hello-bun hello-php hello-julia hello-r hello-dotnet hello-flavor-acme hello-jruby hello-truffleruby; do
             # spec 38 §3's tag grammar is <version>-<triplet> — the payload
             # NAME rides the repo path, so each app gets its own flat
             # repository ($OCI_REPO/<app>, e.g. ghcr.io/tebako-packages/

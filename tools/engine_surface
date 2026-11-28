@@ -317,14 +317,17 @@ say "skip gates: jruby + truffleruby (registry carries no engine: key)"
 run_rc 69 'engine "jruby"' run jruby
 run_rc 69 'engine "truffleruby"' run truffleruby
 
-say "skip gate: dotnet (the factory's first publish is pending — no release, no registry rows)"
-# The dormant hello-dotnet arm (empty platforms) keeps the factory out of
-# --engine-registries, so the leg never configures the ref at all — the
-# 69 is the same shape either way. When the publish lands AND the
-# Tebakofile arm's platforms flip joins the factory to the list, this
-# gate flips red ON PURPOSE: replace it with the real dispatch arm then
-# (never silence it).
-run_rc 69 'engine "dotnet"' run dotnet
+say "engine: dotnet (bare — the muxer resolves the pinned SDK through the shim)"
+# The arm activated 2026-11-26 on the factory's first publish (v2.8.83):
+# the registry renders the engine key, and the bare probe is the same
+# class as the census arms (the exit-69 skip gate this replaces was the
+# dormant era's named red — never silence it, so it becomes the arm's
+# green, never a deleted gate).
+if covered hello-dotnet; then
+  run_ok '^10\.0\.404$' run dotnet --version
+else
+  say "engine: dotnet — skipped on $TRIPLET (the factory publishes no $TRIPLET pair today; the arm covers: $(ruby tools/pins.rb --platforms hello-dotnet))"
+fi
 
 say "the shim surface: install (bare + command forms), dispatch, list, doctor"
 # The dispatcher resolves sibling-wise: tebako-shim sits beside the CLI
